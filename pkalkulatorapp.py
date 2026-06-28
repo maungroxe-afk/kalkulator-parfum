@@ -308,6 +308,36 @@ with tab_chat:
 
 # --- TAB ACCORDS PIE CHART ---
 with tab_enc:
+    with tab_acc:
+    st.write("### Kluster Roda Aroma (100% Konsentrat)")
+    
+    # Tambahkan pengecekan data
+    active_mat = edited_df[edited_df["Rasio Racikan (%)"] > 0]["Nama Raw Material"].tolist()
+    
+    if not active_mat:
+        st.info("Silakan isi data bahan di tabel utama terlebih dahulu.")
+    else:
+        with st.spinner("Memetakan karakter aroma via AI..."):
+            mapping = get_ai_complex_accords(active_mat)
+            
+            if not mapping:
+                st.warning("AI gagal memetakan aroma (mungkin kuota habis). Coba segarkan (refresh) halaman.")
+            else:
+                # Logika pembuatan diagram
+                accord_data = []
+                for _, r in edited_df[fragrance_mask].iterrows():
+                    accs = mapping.get(r["Nama Raw Material"], ["Neutral"])
+                    for a in accs:
+                        if a != "Neutral":
+                            accord_data.append({"Accord": a, "Value": r["Vol Aktual (ml)"]})
+                
+                if not accord_data:
+                    st.info("Belum ada data aroma yang terpetakan untuk diagram.")
+                else:
+                    df_acc = pd.DataFrame(accord_data).groupby("Accord")["Value"].sum().reset_index()
+                    fig = px.pie(df_acc, values="Value", names="Accord", hole=0.5)
+                    st.plotly_chart(fig, use_container_width=True)
+
     st.header("Analisis Kluster Roda Aroma")
     if not api_key: st.warning("Masukkan API Key di sidebar.")
     elif not active_materials: st.info("Masukkan komponen bahan yang aktif di tabel atas.")
