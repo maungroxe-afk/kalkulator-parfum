@@ -11,7 +11,14 @@ st.write("Studio Formulasi Komplit dengan Ringkasan Visual Piramida Notes ala Fr
 
 # --- SIDEBAR: KONFIGURASI AI ---
 st.sidebar.header("🔑 Konfigurasi AI")
-api_key = st.sidebar.text_input("Google Gemini API Key", type="password", help="Masukkan API Key dari Google AI Studio")
+
+# AI akan otomatis mencoba membaca dari Secrets Management Streamlit terlebih dahulu
+if "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    st.sidebar.success("✅ API Key Terhubung Otomatis")
+else:
+    # Jika belum di-setting di server, opsi manual di sidebar tetap muncul sebagai cadangan
+    api_key = st.sidebar.text_input("Google Gemini API Key", type="password", help="Masukkan API Key dari Google AI Studio")
 
 st.markdown("---")
 
