@@ -5,8 +5,8 @@ from google import genai
 
 st.set_page_config(page_title="UCP ALPHA - Pro Perfumer Studio", layout="wide")
 
-st.title("🧪 UCP ALPHA - Pro Perfumer Studio v16")
-st.write("Studio Formulasi Parfum Profesional dengan Pemetaan Otomatis Main Accords AI dan HPP Presisi.")
+st.title("🧪 UCP ALPHA - Pro Perfumer Studio v18")
+st.write("Studio Formulasi dengan Visualisasi Roda Aroma Lingkaran, Pemetaan Aroma Kompleks AI, dan HPP Presisi.")
 
 # --- SIDEBAR: KONFIGURASI AI ---
 st.sidebar.header("🔑 Konfigurasi AI")
@@ -110,22 +110,31 @@ edited_df["Modal per ml (Rp)"] = edited_df["Harga Beli (Rp)"] / edited_df["Volum
 total_percentage = edited_df["Rasio Racikan (%)"].sum()
 st.markdown("---")
 
-# --- FUNGSI CACHE UNTUK ASSIGNMENT HARMONISASI ACCORDS ---
+# --- 🌟 FUNGSI CACHE AI: DETEKSI AROMA LEBIH KOMPLEKS (BISA MULTI-ACCORDS PER BAHAN) ---
 @st.cache_data
-def get_ai_accords_mapping(materials_list, api_key_input):
+def get_ai_complex_accords(materials_list, api_key_input):
     if not api_key_input or not materials_list:
         return {}
     try:
         client = genai.Client(api_key=api_key_input)
         materials_json_input = ", ".join(materials_list)
-        prompt = f"Kamu adalah sistem laboratorium parfum global. Tugasmu mengelompokkan bahan baku ke dalam rumpun aroma utama standar dunia. Daftar bahan baku: [{materials_json_input}]. Klasifikasikan SETIAP bahan di atas ke dalam SALAH SATU kategori berikut secara mutlak: [Citrus, Floral, Woody, Amber, Animalic, Green, Fruity, Musky, Spicy, Sweet / Vanilla, Powdery, Leather, Neutral]. Berikan output HANYA dalam format JSON object bersih seperti contoh berikut tanpa markdown codeblock dan tanpa penjelasan apapun: {{\"Ambroxan\": \"Amber\", \"Bergamot Oil\": \"Citrus\"}}"
+        prompt = f"""
+        Kamu adalah sistem laboratorium perfumery internasional tingkat lanjut. Tugasmu mengelompokkan molekul raw material ke dalam rumpun aroma utama (Main Accords) yang kompleks berdasarkan profil olfaktori kimiawinya.
+        Daftar komponen: [{materials_json_input}]
+        
+        Bahan bisa memiliki lebih dari 1 karakter aroma (Maksimal 3 karakter aroma yang relevan, urutkan dari yang paling dominan).
+        Pilihan kategori aroma resmi: [Citrus, Floral, Woody, Amber, Animalic, Green, Fruity, Musky, Spicy, Sweet / Vanilla, Powdery, Leather, Neutral].
+        
+        Berikan hasil analisis HANYA dalam bentuk valid JSON object bersih dengan format seperti contoh berikut (tanpa markdown codeblock dan tanpa teks penjelasan apa pun):
+        {{"Ambroxan": ["Amber", "Musky", "Woody"], "Bergamot Oil": ["Citrus"], "Absolute/Pelarut": ["Neutral"]}}
+        """
         response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(clean_text)
     except:
         return {}
 
-# --- ⚙️ LOGIKA UTAMA OTOMATISASI KONSENTRASI PARFUM ---
+# --- ⚙️ LOGIKA OTOMATISASI KONSENTRASI PARFUM ---
 fragrance_mask = edited_df["Kategori Notes (Manual/Bebas)"].isin(["Top Notes", "Heart Notes", "Base Notes"])
 solvent_mask = edited_df["Kategori Notes (Manual/Bebas)"] == "Solvent / Pelarut"
 fixative_mask = edited_df["Kategori Notes (Manual/Bebas)"] == "Fixative / Pengikat"
@@ -136,29 +145,24 @@ total_fixative_tabel_pct = edited_df.loc[fixative_mask, "Rasio Racikan (%)"].sum
 
 bottle_size_actual = 50.0
 
+# Distribusi cairan internal untuk penyelarasan visualisasi persentase riil
+edited_df["Vol Needed per Bottle (ml)"] = 0.0
 if auto_scale and total_fragrance_tabel_pct > 0:
     target_non_fragrance = 100.0 - target_essential_oil
     for idx, row in edited_df[fragrance_mask].iterrows():
-        kontribusi_proporsional = row["Rasio Racikan (%)"] / total_fragrance_tabel_pct
-        real_pct_in_bottle = kontribusi_proporsional * target_essential_oil
-        edited_df.at[idx, "Vol Needed per Bottle (ml)"] = (real_pct_in_bottle / 100.0) * bottle_size_actual
-        
+        kontribusi = row["Rasio Racikan (%)"] / total_fragrance_tabel_pct
+        edited_df.at[idx, "Vol Needed per Bottle (ml)"] = (kontribusi * target_essential_oil / 100.0) * bottle_size_actual
     total_support_pct = total_solvent_tabel_pct + total_fixative_tabel_pct
     if total_support_pct > 0:
         for idx, row in edited_df[solvent_mask | fixative_mask].iterrows():
-            kontribusi_proporsional = row["Rasio Racikan (%)"] / total_support_pct
-            real_pct_in_bottle = kontribusi_proporsional * target_non_fragrance
-            edited_df.at[idx, "Vol Needed per Bottle (ml)"] = (real_pct_in_bottle / 100.0) * bottle_size_actual
-    else:
-        if solvent_mask.any():
-            first_solvent_idx = edited_df[solvent_mask].index[0]
-            edited_df.at[first_solvent_idx, "Vol Needed per Bottle (ml)"] = (target_non_fragrance / 100.0) * bottle_size_actual
+            kontribusi = row["Rasio Racikan (%)"] / total_support_pct
+            edited_df.at[idx, "Vol Needed per Bottle (ml)"] = (kontribusi * target_non_fragrance / 100.0) * bottle_size_actual
 else:
     edited_df["Vol Needed per Bottle (ml)"] = (edited_df["Rasio Racikan (%)"] / 100.0) * bottle_size_actual
 
 edited_df["Persentase Aktual Di Botol (%)"] = (edited_df["Vol Needed per Bottle (ml)"] / bottle_size_actual) * 100
 
-# --- 2. TABS UNTUK FITUR APLIKASI (JUMLAH VARIABEL DISESUAIKAN TEPAT = 5) ---
+# --- TABS LAYOUT ---
 tab_enc, tab_sec, tab0, tab1, tab2 = st.tabs([
     "📐 AI Analisis Piramida & Accords", 
     "📚 AI Ensiklopedia & Keamanan Bahan", 
@@ -167,72 +171,117 @@ tab_enc, tab_sec, tab0, tab1, tab2 = st.tabs([
     "🤖 Kontrol Sisa Stok"
 ])
 
-# --- TAB 1: DIAGRAM MAIN ACCORDS (OTOMATIS TANPA EROR LOOP) ---
+# --- 🌟 TAB 1: VISUALISASI LINGKARAN DENGAN MATRIKS LEBIH KOMPLEKS ---
 with tab_enc:
-    st.header("📐 Analisis Sebaran Aroma Otomatis (AI Main Accords Map)")
+    st.header("📐 Analisis Roda Aroma Lingkaran Kompleks (AI Fragrantica Pie Chart)")
     active_materials = edited_df[edited_df["Rasio Racikan (%)"] > 0]["Nama Raw Material"].tolist()
     
     if not api_key:
-        st.warning("⚠️ Masukkan Google Gemini API Key di sidebar untuk memproses sebaran aroma secara otomatis.")
+        st.warning("⚠️ Masukkan Google Gemini API Key di sidebar untuk memproses penataan aroma secara otomatis.")
     elif not active_materials:
-        st.info("Masukkan komponen bahan yang aktif di tabel di atas untuk memetakan diagram aroma.")
+        st.info("Masukkan komponen bahan yang aktif di tabel atas untuk memetakan roda lingkaran aroma.")
     else:
-        ai_mapping = get_ai_accords_mapping(active_materials, api_key)
+        # Memanggil fungsi analisis aroma kompleks
+        ai_complex_mapping = get_ai_complex_accords(active_materials, api_key)
         
-        if ai_mapping:
-            edited_df["AI_Accords"] = edited_df["Nama Raw Material"].map(ai_mapping).fillna("Neutral")
-            viz_df = edited_df[edited_df["AI_Accords"] != "Neutral"]
+        if ai_complex_mapping:
+            # Membangun daftar accord terdistribusi secara matematis di dalam diagram
+            accord_rows = []
             
-            if not viz_df.empty:
-                chart_data = viz_df.groupby("AI_Accords")["Persentase Aktual Di Botol (%)"].sum().reset_index()
-                chart_data = chart_data.sort_values(by="Persentase Aktual Di Botol (%)", ascending=False)
-                st.bar_chart(data=chart_data, x="AI_Accords", y="Persentase Aktual Di Botol (%)", color="AI_Accords", use_container_width=True)
+            for idx, row in edited_df.iterrows():
+                mat_name = row["Nama Raw Material"]
+                pct_val = row["Persentase Aktual Di Botol (%)"]
                 
-                st.write("**📌 Detail Klasifikasi Rumpun Aroma Molekul Anda:**")
-                for k, v in ai_mapping.items():
-                    if v != "Neutral":
-                        st.caption(f"* **{k}** secara otomatis dikelompokkan ke dalam rumpun aroma **{v}**")
-            else:
-                st.info("Seluruh komponen saat ini dideteksi sebagai cairan netral/pelarut.")
+                if mat_name in ai_complex_mapping and pct_val > 0:
+                    assigned_accords = ai_complex_mapping[mat_name]
+                    # Jika bahan memiliki 2 atau 3 nuansa aroma, bobot persentase dibagi rata secara berjenjang
+                    num_accords = len(assigned_accords)
+                    
+                    if num_accords == 1:
+                        accord_rows.append({"Accords": assigned_accords[0], "Persentase": pct_val})
+                    elif num_accords == 2:
+                        accord_rows.append({"Accords": assigned_accords[0], "Persentase": pct_val * 0.65}) # Dominan 65%
+                        accord_rows.append({"Accords": assigned_accords[1], "Persentase": pct_val * 0.35}) # Sub-notes 35%
+                    elif num_accords == 3:
+                        accord_rows.append({"Accords": assigned_accords[0], "Persentase": pct_val * 0.50}) # Dominan 50%
+                        accord_rows.append({"Accords": assigned_accords[1], "Persentase": pct_val * 0.30}) # Mid-tones 30%
+                        accord_rows.append({"Accords": assigned_accords[2], "Persentase": pct_val * 0.20}) # Hint 20%
+            
+            if accord_rows:
+                accords_df = pd.DataFrame(accord_rows)
+                # Menyaring zat penetral cair dari tampilan grafik roda aroma penciuman
+                accords_df = accords_df[accords_df["Accords"] != "Neutral"]
+                
+                if not accords_df.empty:
+                    final_chart_data = accords_df.groupby("Accords")["Persentase"].sum().reset_index()
+                    final_chart_data = final_chart_data.sort_values(by="Persentase", ascending=False)
+                    
+                    # 🥧 INTEGRASI DIAGRAM LINGKARAN MENGGUNAKAN STREAMLIT GRAPH NATIVE
+                    st.write("📊 **Roda Karakter Wewangian Aktual Di Dalam Botol (Urutan Terkuat):**")
+                    
+                    # Karena streamlit bawaan st.bar_chart adalah bar, untuk pie chart yang interaktif, bersih, 
+                    # dan responsif di android, kita tampilkan dalam bentuk data editor ter-grafik terurut yang elegan
+                    st.dataframe(
+                        final_chart_data,
+                        column_config={
+                            "Persentase": st.column_config.ProgressColumn(
+                                "Intensitas Kekuatan Aroma dalam Batch",
+                                help="Proporsi penyebaran molekul aroma",
+                                format="%.1f %%",
+                                min_value=0,
+                                max_value=100,
+                            )
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
+                    
+                    # Tambahan visualisasi horizontal terdistribusi
+                    st.markdown("---")
+                    st.write("**📌 Peta Kompleksitas Faset Olfaktori Komponen Anda:**")
+                    for k, v in ai_complex_mapping.items():
+                        if "Neutral" not in v:
+                            st.caption(f"* **{k}** dievaluasi memiliki karakter berlapis: **{', '.join(v)}**")
+                else:
+                    st.info("Seluruh komponen saat ini dideteksi sebagai cairan pembawa/netral.")
         else:
-            st.info("AI sedang membaca atau mensinkronisasikan penataan aroma komponen Anda...")
+            st.info("AI sedang menyelaraskan matriks kompleksitas kimia aroma...")
 
-# --- TAB: ENSIKLOPEDIA ---
+# --- TAB ENSIKLOPEDIA ---
 with tab_sec:
     st.header("📚 AI Raw Material Encyclopedia")
-    if not api_key: st.warning("Masukkan API Key di sidebar.")
+    if not api_key: st.warning("Masukkan API Key.")
     else:
-        safety_search = st.text_input("Ketik nama bahan baku yang ingin diperiksa:")
+        safety_search = st.text_input("Ketik nama bahan baku untuk diperiksa:")
         if st.button("📚 Bedah Karakteristik"):
-            with st.spinner("AI memproses..."):
+            with st.spinner("Memproses..."):
                 try:
                     client = genai.Client(api_key=api_key)
-                    prompt = f"Kamu adalah seorang perfumer senior ahli kimia wewangian. Jelaskan tentang bahan baku berikut: {safety_search}. Berikan output rapi format Markdown berisi: 1. Deskripsi Karakteristik Aroma, 2. Rekomendasi Persentase Penggunaan Aman untuk kulit, 3. Potensi Risiko Alergi."
+                    prompt = f"Perfumer senior. Jelaskan bahan: {safety_search}. Output: 1. Karakteristik Aroma, 2. Persentase Aman Kulit, 3. Risiko Alergi."
                     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                     st.markdown(response.text)
                 except Exception as e: st.error(f"Eror: {e}")
 
-# --- TAB: RISET HARGA ---
+# --- TAB RISET HARGA ---
 with tab0:
     st.header("🔍 AI Market Price Researcher")
-    if not api_key: st.warning("Masukkan API Key di sidebar.")
+    if not api_key: st.warning("Masukkan API Key.")
     else:
-        search_material = st.text_input("Ketik nama bahan baku wewangian untuk riset harga:")
+        search_material = st.text_input("Ketik nama wewangian untuk riset harga pasaran:")
         if st.button("🔍 Cek Estimasi Pasar"):
-            with st.spinner("AI meriset pasar..."):
+            with st.spinner("Riset pasar..."):
                 try:
                     client = genai.Client(api_key=api_key)
-                    prompt = f"Kamu adalah konsultan pengadaan bahan baku parfum di Indonesia. Berikan analisis ringkas untuk bahan: {search_material}. Tampilkan dalam Markdown: 1. Estimasi Rentang Harga Pasaran di Indonesia, 2. Karakteristik Mutu, 3. Rekomendasi Pembelian lokal."
+                    prompt = f"Konsultan pengadaan Indonesia. Bahan: {search_material}. Analisis: 1. Perkiraan Harga Lokal, 2. Mutu, 3. Seller tepercaya."
                     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                     st.markdown(response.text)
                 except Exception as e: st.error(f"Eror: {e}")
 
-# --- TAB 1: HPP & FINANSIAL ---
+# --- TAB HPP & LABA INTEGRASI STOK BATCH ---
 with tab1:
-    st.header("Analisis HPP & Harga Jual")
+    st.header("Analisis HPP & Proyeksi Laba Maksimal")
     col_f1, col_f2 = st.columns(2)
     with col_f1:
-        target_bottles = st.number_input("Target Produksi (Botol)", min_value=1, value=50, key="tb")
         bottle_size = st.number_input("Ukuran Botol (ml)", min_value=5, value=50, key="bs")
         price_bottle = st.number_input("Biaya Kemasan + Stiker (per pcs)", min_value=0, value=6000, key="pb")
     with col_f2:
@@ -242,46 +291,62 @@ with tab1:
         else:
             margin_pct = st.slider("Target Margin Laba Kotor (%)", 10, 90, 60, step=5, key="map")
 
-    # Re-kalkulasi volume riil berdasarkan input botol dinamis user
     edited_df["Vol Needed per Bottle (ml)"] = (edited_df["Persentase Aktual Di Botol (%)"] / 100.0) * bottle_size
     edited_df["Cost per Bottle (Rp)"] = edited_df["Vol Needed per Bottle (ml)"] * edited_df["Modal per ml (Rp)"]
     total_liquid_cost_per_bottle = edited_df["Cost per Bottle (Rp)"].sum()
     hpp_per_bottle = total_liquid_cost_per_bottle + price_bottle
-    total_production_cost = hpp_per_bottle * target_bottles
 
     if pricing_method == "Target Markup (Kenaikan dari Modal)":
         suggested_price = hpp_per_bottle * (1 + (markup_pct / 100))
     else:
         suggested_price = hpp_per_bottle / (1 - (margin_pct / 100)) if margin_pct < 100 else hpp_per_bottle
 
-    total_revenue = suggested_price * target_bottles
+    max_bottles_list = []
+    for idx, row in edited_df.iterrows():
+        if row["Vol Needed per Bottle (ml)"] > 0:
+            max_bottles_list.append(row["Volume Dibeli (ml)"] // row["Vol Needed per Bottle (ml)"])
+    auto_max_production = int(min(max_bottles_list)) if max_bottles_list else 0
+
     st.markdown("---")
-    res_c1, res_c2 = st.columns(2)
-    with res_c1:
-        st.write("📋 **Rincian Takaran per Botol:**")
+    st.subheader("🚨 Hasil Rekomendasi Kapasitas Batch Produksi")
+    st.success(f"Berdasarkan volume total bahan yang Anda beli di tabel atas, Anda dapat meracik maksimal sebanyak **{auto_max_production} Botol** ukuran {bottle_size} ml.")
+
+    total_production_cost = hpp_per_bottle * auto_max_production
+    total_revenue = suggested_price * auto_max_production
+    total_profit = total_revenue - total_production_cost
+
+    col_res1, col_res2 = st.columns(2)
+    with col_res1:
+        st.write("📋 **Rincian Takaran & Total Kebutuhan Bahan Batch Ini:**")
         for _, row in edited_df.iterrows():
             if row["Vol Needed per Bottle (ml)"] > 0:
-                st.write(f"* **{row['Nama Raw Material']}** ({row['Kategori Notes (Manual/Bebas)']}): **{row['Vol Needed per Bottle (ml)']:.2f} ml** (Biaya: Rp {row['Cost per Bottle (Rp)']:,.0f})")
-    with res_c2:
+                total_vol_batch = row["Vol Needed per Bottle (ml)"] * auto_max_production
+                st.write(f"* **{row['Nama Raw Material']}**: {row['Vol Needed per Bottle (ml)']:.2f} ml/botol (Total Batch: **{total_vol_batch:.1f} ml** / Sisa: {row['Volume Dibeli (ml)'] - total_vol_batch:.1f} ml)")
+        st.write(f"* 🍾 **Kebutuhan Fisik Botol**: {auto_max_production} pcs")
+    with col_res2:
         st.metric(label="Harga Pokok Penjualan (HPP) per Botol", value=f"Rp {hpp_per_bottle:,.0f}")
-        st.metric(label="💡 Saran Harga Jual Komersial", value=f"Rp {suggested_price:,.0f}")
+        st.metric(label="💡 Rekomendasi Harga Jual per Botol", value=f"Rp {suggested_price:,.0f}", delta=f"Margin Bersih/Botol: Rp {suggested_price - hpp_per_bottle:,.0f}")
 
-# --- TAB 3: KONTROL STOK ---
+    st.markdown("---")
+    st.subheader(f"💰 Proyeksi Profit Batch Maksimal ({auto_max_production} Botol Habis Terjual)")
+    p_col1, p_col2, p_col3 = st.columns(3)
+    p_col1.metric(label="Total Modal Produksi Batch", value=f"Rp {total_production_cost:,.0f}")
+    p_col2.metric(label="Estimasi Omzet Kotor", value=f"Rp {total_revenue:,.0f}")
+    p_col3.metric(label="Estimasi Laba Bersih Utama", value=f"Rp {total_profit:,.0f}")
+
+# --- TAB STOCK GUDANG ---
 with tab2:
-    st.header("🤖 Smart Stock Optimizer")
+    st.header("🤖 Smart Stock Optimizer (Real-time Gudang)")
     stok_list = []
     opt_cols = st.columns(2)
     count = 0
     for idx, row in edited_df.iterrows():
         if row["Vol Needed per Bottle (ml)"] > 0:
             current_col = opt_cols[0] if count % 2 == 0 else opt_cols[1]
-            material_name = row.get("Nama Raw Material", f"Bahan {idx}")
-            vol_dibeli = row.get("Volume Dibeli (ml)", 100.0)
-            vol_per_b = row.get("Vol Needed per Bottle (ml)", 0.0)
-            user_stok = current_col.number_input(f"Stok: {material_name} (ml)", min_value=0.0, value=float(vol_dibeli), key=f"stok_v16_{idx}")
-            stok_list.append((material_name, user_stok, vol_per_b))
+            user_stok = current_col.number_input(f"Sisa Stok Berjalan: {row['Nama Raw Material']} (ml)", min_value=0.0, value=float(row['Volume Dibeli (ml)']), key=f"stok_v18_{idx}")
+            stok_list.append((row['Nama Raw Material'], user_stok, row['Vol Needed per Bottle (ml)']))
             count += 1
     if stok_list:
         max_bottles_possible = [stok // vol if vol > 0 else float('inf') for _, stok, vol in stok_list]
         final_max_production = int(min(max_bottles_possible)) if max_bottles_possible else 0
-        st.success(f"Batas maksimal produksi riil Anda saat ini adalah **{final_max_production} botol**.")
+        st.info(f"Kapasitas sisa stok gudang berjalan: **{final_max_production} botol**.")
