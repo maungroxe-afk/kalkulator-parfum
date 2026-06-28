@@ -307,68 +307,52 @@ with tab_chat:
                 except Exception as e: st.sidebar.error(f"Kesalahan komunikasi sistem: {e}")
 
 # --- TAB ACCORDS PIE CHART ---
-with tab_acc:
-    st.write("### Kluster Roda Aroma (100% Konsentrat)")
-    
-    # Tambahkan pengecekan data
-    active_mat = edited_df[edited_df["Rasio Racikan (%)"] > 0]["Nama Raw Material"].tolist()
-    
-    if not active_mat:
-        st.info("Silakan isi data bahan di tabel utama terlebih dahulu.")
-    else:
-        with st.spinner("Memetakan karakter aroma via AI..."):
-            mapping = get_ai_complex_accords(active_mat)
-            
-            if not mapping:
-                st.warning("AI gagal memetakan aroma (mungkin kuota habis). Coba segarkan (refresh) halaman.")
-            else:
-                # Logika pembuatan diagram
-                accord_data = []
-                for _, r in edited_df[fragrance_mask].iterrows():
-                    accs = mapping.get(r["Nama Raw Material"], ["Neutral"])
-                    for a in accs:
-                        if a != "Neutral":
-                            accord_data.append({"Accord": a, "Value": r["Vol Aktual (ml)"]})
-                
-                if not accord_data:
-                    st.info("Belum ada data aroma yang terpetakan untuk diagram.")
-                else:
-                    df_acc = pd.DataFrame(accord_data).groupby("Accord")["Value"].sum().reset_index()
-                    fig = px.pie(df_acc, values="Value", names="Accord", hole=0.5)
-                    st.plotly_chart(fig, use_container_width=True)
-
+with tab_enc:
     st.header("Analisis Kluster Roda Aroma")
-    if not api_key: st.warning("Masukkan API Key di sidebar.")
-    elif not active_materials: st.info("Masukkan komponen bahan yang aktif di tabel atas.")
+    if not api_key: 
+        st.warning("Masukkan API Key di sidebar untuk mengaktifkan analisis AI.")
+    elif not active_materials: 
+        st.info("Masukkan komponen bahan yang aktif di tabel atas.")
     else:
-        ai_complex_mapping = get_ai_complex_accords(active_materials, api_key)
-        if ai_complex_mapping:
-            accord_rows = []
-            for idx, row in edited_df.iterrows():
-                mat_name = row["Nama Raw Material"]
-                pct_val = row["Persentase Aktual Di Botol (%)"]
-                if mat_name in ai_complex_mapping and pct_val > 0:
-                    assigned_accords = ai_complex_mapping[mat_name]
-                    num_accords = len(assigned_accords)
-                    if num_accords == 1:
-                        accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val})
-                    elif num_accords == 2:
-                        accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val * 0.65})
-                        accord_rows.append({"Accords": assigned_accords[1], "Persentase Raw": pct_val * 0.35})
-                    elif num_accords == 3:
-                        accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val * 0.50})
-                        accord_rows.append({"Accords": assigned_accords[1], "Persentase Raw": pct_val * 0.30})
-                        accord_rows.append({"Accords": assigned_accords[2], "Persentase Raw": pct_val * 0.20})
-            if accord_rows:
-                accords_df = pd.DataFrame(accord_rows)
-                accords_df = accords_df[accords_df["Accords"] != "Neutral"]
-                if not accords_df.empty:
-                    total_pure_fragrance_sum = accords_df["Persentase Raw"].sum()
-                    if total_pure_fragrance_sum > 0:
-                        accords_df["Persentase Aroma Komposisi (%)"] = (accords_df["Persentase Raw"] / total_pure_fragrance_sum) * 100
-                        final_chart_data = accords_df.groupby("Accords")["Persentase Aroma Komposisi (%)"].sum().reset_index()
-                        final_chart_data = final_chart_data.sort_values(by="Persentase Aroma Komposisi (%)", ascending=False)
-                        
+        with st.spinner("Memetakan karakter aroma..."):
+            ai_complex_mapping = get_ai_complex_accords(active_materials, api_key)
+            
+            if not ai_complex_mapping or ai_complex_mapping == {}:
+                st.error("Gagal mendapatkan data dari AI. Pastikan API Key aktif dan kuota tersedia.")
+            else:
+                accord_rows = []
+                for _, row in edited_df.iterrows():
+                    mat_name = row["Nama Raw Material"]
+                    pct_val = row["Persentase Aktual Di Botol (%)"]
+                    
+                    # Cek apakah bahan ada di hasil mapping AI
+                    if mat_name in ai_complex_mapping and pct_val > 0:
+                        assigned_accords = ai_complex_mapping[mat_name]
+                        if isinstance(assigned_accords, list):
+                            # Membagi persentase secara proporsional ke tiap accord
+                            share = pct_val / len(assigned_accords)
+                            for acc in assigned_accords:
+                                if acc != "Neutral":
+                                    accord_rows.append({"Accords": acc, "Persentase Raw": share})
+                
+                if accord_rows:
+                    accords_df = pd.DataFrame(accord_rows)
+                    # Agregasi data untuk grafik
+                    final_chart_data = accords_df.groupby("Accords")["Persentase Raw"].sum().reset_index()
+                    
+                    # Grafik Pie Chart yang elegan
+                    fig = px.pie(
+                        final_chart_data, 
+                        values="Persentase Raw", 
+                        names="Accords", 
+                        hole=0.4, 
+                        color_discrete_sequence=px.colors.sequential.Burgyl
+                    )
+                    fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Karakter aroma belum terdeteksi. Pastikan data bahan Anda memiliki kategori yang sesuai.")
+ 
                         # Mengubah palet warna grafik lingkaran menjadi monokrom/muted tone agar terkesan mahal
                         fig = px.pie(final_chart_data, values="Persentase Aroma Komposisi (%)", names="Accords", hole=0.5, color_discrete_sequence=px.colors.sequential.Burgyl)
                         fig.update_traces(textinfo="percent+label", textposition="outside")
