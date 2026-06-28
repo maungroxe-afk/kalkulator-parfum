@@ -5,8 +5,8 @@ from google import genai
 
 st.set_page_config(page_title="UCP ALPHA - Pro Perfumer Studio", layout="wide")
 
-st.title("🧪 UCP ALPHA - Pro Perfumer Studio v15")
-st.write("Studio Formulasi Parfum dengan Diagram Main Accords Otomatis Berbasis AI dan HPP Presisi.")
+st.title("🧪 UCP ALPHA - Pro Perfumer Studio v16")
+st.write("Studio Formulasi Parfum Profesional dengan Pemetaan Otomatis Main Accords AI dan HPP Presisi.")
 
 # --- SIDEBAR: KONFIGURASI AI ---
 st.sidebar.header("🔑 Konfigurasi AI")
@@ -43,7 +43,7 @@ with col_g1:
 
 with col_g2:
     st.subheader("📂 Upload Data Bahan Baku (Opsional)")
-    st.write("Anda bisa mengunggah file Excel (.xlsx) or .csv yang berisi data struktur bahan baku Anda.")
+    st.write("Anda bisa mengunggah file Excel (.xlsx) atau .csv yang berisi data struktur bahan baku Anda.")
     uploaded_file = st.file_uploader("Pilih file data bahan Anda", type=["csv", "xlsx"])
 
 # Data template awal bawaan aplikasi
@@ -110,8 +110,20 @@ edited_df["Modal per ml (Rp)"] = edited_df["Harga Beli (Rp)"] / edited_df["Volum
 total_percentage = edited_df["Rasio Racikan (%)"].sum()
 st.markdown("---")
 
-# --- 2. TABS UNTUK FITUR APLIKASI ---
-tab_enc, tab_sec, tab0, tab1, tab2, tab3 = st.tabs(["📐 AI Analisis Piramida & Accords", "📚 AI Ensiklopedia & Keamanan Bahan", "🔍 AI Asisten Riset Harga", "📊 Perhitungan HPP & Laba", "🤖 Kontrol Sisa Stok"])
+# --- FUNGSI CACHE UNTUK ASSIGNMENT HARMONISASI ACCORDS ---
+@st.cache_data
+def get_ai_accords_mapping(materials_list, api_key_input):
+    if not api_key_input or not materials_list:
+        return {}
+    try:
+        client = genai.Client(api_key=api_key_input)
+        materials_json_input = ", ".join(materials_list)
+        prompt = f"Kamu adalah sistem laboratorium parfum global. Tugasmu mengelompokkan bahan baku ke dalam rumpun aroma utama standar dunia. Daftar bahan baku: [{materials_json_input}]. Klasifikasikan SETIAP bahan di atas ke dalam SALAH SATU kategori berikut secara mutlak: [Citrus, Floral, Woody, Amber, Animalic, Green, Fruity, Musky, Spicy, Sweet / Vanilla, Powdery, Leather, Neutral]. Berikan output HANYA dalam format JSON object bersih seperti contoh berikut tanpa markdown codeblock dan tanpa penjelasan apapun: {{\"Ambroxan\": \"Amber\", \"Bergamot Oil\": \"Citrus\"}}"
+        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        clean_text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_text)
+    except:
+        return {}
 
 # --- ⚙️ LOGIKA UTAMA OTOMATISASI KONSENTRASI PARFUM ---
 fragrance_mask = edited_df["Kategori Notes (Manual/Bebas)"].isin(["Top Notes", "Heart Notes", "Base Notes"])
@@ -122,10 +134,6 @@ total_fragrance_tabel_pct = edited_df.loc[fragrance_mask, "Rasio Racikan (%)"].s
 total_solvent_tabel_pct = edited_df.loc[solvent_mask, "Rasio Racikan (%)"].sum()
 total_fixative_tabel_pct = edited_df.loc[fixative_mask, "Rasio Racikan (%)"].sum()
 
-# Inisialisasi kolom kalkulasi riil volume
-edited_df["Vol Needed per Bottle (ml)"] = 0.0
-
-# Memasukkan target botol dummy/default jika di tab HPP belum diinput
 bottle_size_actual = 50.0
 
 if auto_scale and total_fragrance_tabel_pct > 0:
@@ -148,13 +156,20 @@ if auto_scale and total_fragrance_tabel_pct > 0:
 else:
     edited_df["Vol Needed per Bottle (ml)"] = (edited_df["Rasio Racikan (%)"] / 100.0) * bottle_size_actual
 
-# Hitung bobot aktual relatif untuk diagram
 edited_df["Persentase Aktual Di Botol (%)"] = (edited_df["Vol Needed per Bottle (ml)"] / bottle_size_actual) * 100
 
-# --- 🌟 TAB 1: DIAGRAM MAIN ACCORDS (OTOMATIS TANPA TOMBOL) ---
+# --- 2. TABS UNTUK FITUR APLIKASI (JUMLAH VARIABEL DISESUAIKAN TEPAT = 5) ---
+tab_enc, tab_sec, tab0, tab1, tab2 = st.tabs([
+    "📐 AI Analisis Piramida & Accords", 
+    "📚 AI Ensiklopedia & Keamanan Bahan", 
+    "🔍 AI Asisten Riset Harga", 
+    "📊 Perhitungan HPP & Laba", 
+    "🤖 Kontrol Sisa Stok"
+])
+
+# --- TAB 1: DIAGRAM MAIN ACCORDS (OTOMATIS TANPA EROR LOOP) ---
 with tab_enc:
     st.header("📐 Analisis Sebaran Aroma Otomatis (AI Main Accords Map)")
-    
     active_materials = edited_df[edited_df["Rasio Racikan (%)"] > 0]["Nama Raw Material"].tolist()
     
     if not api_key:
@@ -162,36 +177,25 @@ with tab_enc:
     elif not active_materials:
         st.info("Masukkan komponen bahan yang aktif di tabel di atas untuk memetakan diagram aroma.")
     else:
-        # Menjalankan pemetaan AI secara otomatis menggunakan cache state agar tidak over-request
-        try:
-            client = genai.Client(api_key=api_key)
-            materials_json_input = ", ".join(active_materials)
-            
-            # Request ke AI untuk memetakan rumpun aroma secara instan
-            prompt = f"Kamu adalah sistem laboratorium parfum global. Tugasmu mengelompokkan bahan baku ke dalam rumpun aroma utama standar dunia. Daftar bahan baku: [{materials_json_input}]. Klasifikasikan SETIAP bahan di atas ke dalam SALAH SATU kategori berikut secara mutlak: [Citrus, Floral, Woody, Amber, Animalic, Green, Fruity, Musky, Spicy, Sweet / Vanilla, Powdery, Leather, Neutral]. Berikan output HANYA dalam format JSON object bersih seperti contoh berikut tanpa markdown codeblock dan tanpa penjelasan apapun: {{\"Ambroxan\": \"Amber\", \"Bergamot Oil\": \"Citrus\"}}"
-            
-            response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-            clean_text = response.text.replace("```json", "").replace("```", "").strip()
-            ai_mapping = json.loads(clean_text)
-            
-            # Map hasil AI ke Dataframe utama
+        ai_mapping = get_ai_accords_mapping(active_materials, api_key)
+        
+        if ai_mapping:
             edited_df["AI_Accords"] = edited_df["Nama Raw Material"].map(ai_mapping).fillna("Neutral")
-            
-            # Tampilkan Grafik Batang Fragrantica secara otomatis
             viz_df = edited_df[edited_df["AI_Accords"] != "Neutral"]
+            
             if not viz_df.empty:
                 chart_data = viz_df.groupby("AI_Accords")["Persentase Aktual Di Botol (%)"].sum().reset_index()
                 chart_data = chart_data.sort_values(by="Persentase Aktual Di Botol (%)", ascending=False)
                 st.bar_chart(data=chart_data, x="AI_Accords", y="Persentase Aktual Di Botol (%)", color="AI_Accords", use_container_width=True)
                 
-                st.write("**📌 Detail Klasifikasi Molekul Bahan Baku Anda:**")
+                st.write("**📌 Detail Klasifikasi Rumpun Aroma Molekul Anda:**")
                 for k, v in ai_mapping.items():
                     if v != "Neutral":
-                        st.caption(f"* **{k}** didefinisikan oleh sistem sebagai rumpun aroma **{v}**")
+                        st.caption(f"* **{k}** secara otomatis dikelompokkan ke dalam rumpun aroma **{v}**")
             else:
                 st.info("Seluruh komponen saat ini dideteksi sebagai cairan netral/pelarut.")
-        except Exception as e:
-            st.error(f"AI sedang melakukan sinkronisasi data aroma: {e}")
+        else:
+            st.info("AI sedang membaca atau mensinkronisasikan penataan aroma komponen Anda...")
 
 # --- TAB: ENSIKLOPEDIA ---
 with tab_sec:
@@ -223,7 +227,7 @@ with tab0:
                     st.markdown(response.text)
                 except Exception as e: st.error(f"Eror: {e}")
 
-# --- TAB 1: HPP ---
+# --- TAB 1: HPP & FINANSIAL ---
 with tab1:
     st.header("Analisis HPP & Harga Jual")
     col_f1, col_f2 = st.columns(2)
@@ -238,7 +242,7 @@ with tab1:
         else:
             margin_pct = st.slider("Target Margin Laba Kotor (%)", 10, 90, 60, step=5, key="map")
 
-    # Hitung ulang berdasarkan input dinamis user di Tab HPP
+    # Re-kalkulasi volume riil berdasarkan input botol dinamis user
     edited_df["Vol Needed per Bottle (ml)"] = (edited_df["Persentase Aktual Di Botol (%)"] / 100.0) * bottle_size
     edited_df["Cost per Bottle (Rp)"] = edited_df["Vol Needed per Bottle (ml)"] * edited_df["Modal per ml (Rp)"]
     total_liquid_cost_per_bottle = edited_df["Cost per Bottle (Rp)"].sum()
@@ -262,25 +266,8 @@ with tab1:
         st.metric(label="Harga Pokok Penjualan (HPP) per Botol", value=f"Rp {hpp_per_bottle:,.0f}")
         st.metric(label="💡 Saran Harga Jual Komersial", value=f"Rp {suggested_price:,.0f}")
 
-# --- TAB 2: AI FILOSOFI ---
-with tab2:
-    st.header("🔮 AI Fragrance Storyteller")
-    if not api_key: st.warning("⚠️ Masukkan API Key.")
-    else:
-        active_ingredients = edited_df[edited_df["Vol Needed per Bottle (ml)"] > 0]
-        ingredients_string = ", ".join([f"{r.get('Nama Raw Material', 'Bahan')} ({r.get('Vol Needed per Bottle (ml)', 0):.2f}ml)" for _, r in active_ingredients.iterrows()])
-        target_pasar = st.text_input("Spesifikasi Target Pasar:")
-        catatan_tambahan = st.text_area("Nuansa / Kesan Emosional Varian:")
-        if st.button("✨ Racik Cerita Varian"):
-            try:
-                client = genai.Client(api_key=api_key)
-                prompt = f"Kamu adalah Master Perfumer mewah. Analisis formula komersial ini: {ingredients_string}. Jenis Konsentrasi: {concentration_type}. Target Pasar: {target_pasar}. Nuansa Impian: {catatan_tambahan}. Buatkan: 3 Opsi Nama Varian Menarik, 2 Paragraf Narasi Filosofi Produk Indah, dan Evaluasi Taktis mengenai kombinasi aroma tersebut. Output dalam Markdown."
-                response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-                st.markdown(response.text)
-            except Exception as e: st.error(f"Eror: {e}")
-
 # --- TAB 3: KONTROL STOK ---
-with tab3:
+with tab2:
     st.header("🤖 Smart Stock Optimizer")
     stok_list = []
     opt_cols = st.columns(2)
@@ -291,7 +278,7 @@ with tab3:
             material_name = row.get("Nama Raw Material", f"Bahan {idx}")
             vol_dibeli = row.get("Volume Dibeli (ml)", 100.0)
             vol_per_b = row.get("Vol Needed per Bottle (ml)", 0.0)
-            user_stok = current_col.number_input(f"Stok: {material_name} (ml)", min_value=0.0, value=float(vol_dibeli), key=f"stok_v15_{idx}")
+            user_stok = current_col.number_input(f"Stok: {material_name} (ml)", min_value=0.0, value=float(vol_dibeli), key=f"stok_v16_{idx}")
             stok_list.append((material_name, user_stok, vol_per_b))
             count += 1
     if stok_list:
