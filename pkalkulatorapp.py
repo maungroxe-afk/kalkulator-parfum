@@ -4,8 +4,8 @@ from google import genai
 
 st.set_page_config(page_title="UCP ALPHA - Pro Perfumer Studio", layout="wide")
 
-st.title("🧪 UCP ALPHA - Pro Perfumer Studio v9")
-st.write("Formulasi tingkat lanjut dengan pembagian Top, Heart, Base Notes, Asisten AI, dan Visualisasi Piramida Aroma.")
+st.title("🧪 UCP ALPHA - Pro Perfumer Studio v11")
+st.write("Studio Formulasi Parfum dengan Ensiklopedia Keamanan Bahan AI, Riset Harga, dan Analisis HPP Dinamis.")
 
 # --- SIDEBAR: KONFIGURASI AI ---
 st.sidebar.header("🔑 Konfigurasi AI")
@@ -34,7 +34,6 @@ with col_g1:
 
 with col_g2:
     st.subheader("📂 Upload Data Bahan Baku (Opsional)")
-    st.write("Anda bisa mengunggah file Excel (.xlsx) atau .csv yang berisi data struktur bahan baku Anda.")
     uploaded_file = st.file_uploader("Pilih file data bahan Anda", type=["csv", "xlsx"])
 
 # Data awal / template default aplikasi
@@ -54,7 +53,6 @@ if uploaded_file is not None:
         else:
             uploaded_df = pd.read_excel(uploaded_file)
         
-        # LOGIKA PERBAIKAN: Menyelaraskan nama kolom secara otomatis jika tidak pas
         rename_dict = {}
         for col in uploaded_df.columns:
             col_clean = str(col).strip().lower()
@@ -71,7 +69,6 @@ if uploaded_file is not None:
         
         uploaded_df = uploaded_df.rename(columns=rename_dict)
         
-        # Memastikan kolom yang wajib ada tetap tersedia di dataframe
         for required_col in df_template.columns:
             if required_col not in uploaded_df.columns:
                 uploaded_df[required_col] = df_template[required_col] if required_col == "Kategori Notes" else 0.0
@@ -79,7 +76,7 @@ if uploaded_file is not None:
         df_template = uploaded_df[df_template.columns]
         st.success("✅ Data berhasil dimuat dan disesuaikan secara otomatis!")
     except Exception as e:
-        st.error(f"Gagal membaca file: {e}. Menggunakan template bawaan.")
+        st.error(f"Gagal membaca file: {e}")
 
 st.subheader("📊 Tabel Formulasi Bahan Baku")
 st.write("Klik dua kali pada kolom 'Kategori Notes' untuk memilih peran bahan wewangian Anda.")
@@ -99,7 +96,6 @@ edited_df = st.data_editor(
     }
 )
 
-# Menghitung modal dasar per ml
 edited_df["Volume Dibeli (ml)"] = pd.to_numeric(edited_df["Volume Dibeli (ml)"], errors='coerce').fillna(1.0)
 edited_df["Harga Beli (Rp)"] = pd.to_numeric(edited_df["Harga Beli (Rp)"], errors='coerce').fillna(0.0)
 edited_df["Rasio Racikan (%)"] = pd.to_numeric(edited_df["Rasio Racikan (%)"], errors='coerce').fillna(0.0)
@@ -120,45 +116,58 @@ with col_p2:
 st.markdown("---")
 
 # --- 2. TABS UNTUK FITUR APLIKASI ---
-tab0, tab1, tab2, tab3 = st.tabs(["🔍 🤖 AI Asisten Riset Harga", "📊 Perhitungan HPP & Laba", "🔮 AI Filosofi & Storytelling", "🤖 Kontrol Sisa Stok"])
+tab_enc, tab0, tab1, tab2, tab3 = st.tabs(["📚 AI Ensiklopedia & Keamanan Bahan", "🔍 AI Asisten Riset Harga", "📊 Perhitungan HPP & Laba", "🔮 AI Filosofi & Storytelling", "🤖 Kontrol Sisa Stok"])
+
+# --- TAB BARU: ENSIKLOPEDIA & KEAMANAN BAHAN AI ---
+with tab_enc:
+    st.header("📚 AI Raw Material Encyclopedia & Safety Guide")
+    st.write("Ketik nama komponen bahan baku (kimia aroma maupun minyak alami) untuk membedah profil aroma dan batasan aman penggunaannya.")
+    
+    if not api_key:
+        st.warning("⚠️ Masukkan Google Gemini API Key di sidebar untuk mengaktifkan modul keamanan bahan ini.")
+    else:
+        safety_search = st.text_input("Ketik nama bahan baku yang ingin diperiksa (Contoh: Lyral, Lilial, Iso E Super, Oakmoss Extract, Benzyl Salicylate):")
+        
+        if st.button("📚 Bedah Karakteristik & Batas Aman"):
+            if not safety_search:
+                st.error("Masukkan nama bahan wewangian terlebih dahulu.")
+            else:
+                with st.spinner(f"AI sedang mengambil data profil regulasi dan aroma untuk {safety_search}..."):
+                    try:
+                        client = genai.Client(api_key=api_key)
+                        prompt = f"Kamu adalah seorang perfumer senior ahli kimia wewangian dan regulasi keselamatan kulit. Jelaskan secara mendalam tentang bahan baku berikut: {safety_search}. Berikan output rapi dalam format Markdown tanpa menggunakan emoji: 1. Deskripsi Karakteristik Aroma (Bagaimana deskripsi baunya dan termasuk dalam kategori apa), 2. Rekomendasi Persentase Penggunaan Aman (Berapa batasan persentase maksimum yang disarankan untuk produk parfum yang diaplikasikan ke kulit berdasarkan panduan keselamatan umum industri wewangian), 3. Potensi Risiko Alergi atau Efek Samping (Apakah bahan ini termasuk kategori sensitizer kulit atau pemicu alergi yang memerlukan perhatian khusus)."
+                        
+                        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                        st.markdown("---")
+                        st.info(f"📋 Hasil Analisis Keamanan & Profil Bahan: {safety_search}")
+                        st.markdown(response.text)
+                    except Exception as e:
+                        st.error(f"Gagal memanggil layanan AI: {e}")
 
 # --- TAB 0: ASISTEN RISET HARGA ---
 with tab0:
     st.header("🔍 AI Market Price Researcher")
     st.write("Cari tahu estimasi kisaran harga raw material parfum di pasar lokal Indonesia secara cepat.")
-    
     if not api_key:
-        st.warning("⚠️ Masukkan Google Gemini API Key di sidebar untuk mengaktifkan fitur riset harga ini.")
+        st.warning("⚠️ Masukkan Google Gemini API Key di sidebar.")
     else:
         search_material = st.text_input("Ketik nama bahan baku wewangian (Contoh: Iso E Super, Galaxolide, Lavender Oil murni):")
-        
         if st.button("🔍 Cek Estimasi Pasar & Sumber"):
-            if not search_material:
-                st.error("Silakan masukkan nama bahan baku terlebih dahulu.")
+            if not search_material: st.error("Silakan masukkan nama bahan.")
             else:
                 with st.spinner(f"AI sedang meriset estimasi pasaran untuk {search_material}..."):
                     try:
                         client = genai.Client(api_key=api_key)
-                        prompt = f"""
-                        Kamu adalah konsultan pengadaan bahan baku industri kosmetik dan wewangian di Indonesia.
-                        Berikan analisis ringkas untuk bahan baku berikut: '{search_material}'
-                        
-                        Tampilkan output dalam format Markdown:
-                        1. **Estimasi Rentang Harga Pasaran di Indonesia** (Per ml/gram/kg di supplier lokal).
-                        2. **Karakteristik Mutu** (Cara membedakan barang berkualitas/murni vs oplosan).
-                        3. **Rekomendasi Pembelian** (Tips mencari seller tepercaya di marketplace lokal).
-                        """
+                        prompt = f"Kamu adalah konsultan pengadaan bahan baku industri kosmetik dan wewangian di Indonesia. Berikan analisis ringkas untuk bahan baku berikut: {search_material}. Tampilkan output dalam format Markdown yang rapi berisi: 1. Estimasi Rentang Harga Pasaran di Indonesia (Per ml atau gram atau kg di supplier lokal), 2. Karakteristik Mutu (Cara membedakan barang berkualitas murni vs oplosan), 3. Rekomendasi Pembelian (Tips mencari seller terpercaya di marketplace lokal)."
                         response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                         st.markdown("---")
-                        st.info(f"💡 **Hasil Analisis Pasar AI untuk: {search_material}**")
+                        st.info(f"💡 Hasil Analisis Pasar AI untuk: {search_material}")
                         st.markdown(response.text)
-                    except Exception as e:
-                        st.error(f"Gagal memanggil layanan AI: {e}")
+                    except Exception as e: st.error(f"Gagal memanggil layanan AI: {e}")
 
 # --- TAB 1: HPP & DIAGRAM ---
 with tab1:
     st.header("Analisis HPP & Harga Jual")
-    
     if total_percentage > 0:
         st.write("📐 **Struktur Piramida Aroma Terpeta (Diagram Batang):**")
         notes_summary = edited_df.groupby("Kategori Notes")["Rasio Racikan (%)"].sum().reset_index()
@@ -194,7 +203,6 @@ with tab1:
     res_c1, res_c2 = st.columns(2)
     with res_c1:
         st.write("📋 **Rincian Takaran Racikan per Botol:**")
-        # Perbaikan proteksi pembacaan baris yang aman
         for _, row in edited_df.iterrows():
             if "Rasio Racikan (%)" in row and row["Rasio Racikan (%)"] > 0:
                 material_name = row.get("Nama Raw Material", "Bahan Tanpa Nama")
@@ -209,8 +217,7 @@ with tab1:
 # --- TAB 2: AI FILOSOFI ---
 with tab2:
     st.header("🔮 AI Fragrance Storyteller")
-    if not api_key:
-        st.warning("⚠️ Masukkan API Key.")
+    if not api_key: st.warning("⚠️ Masukkan API Key.")
     else:
         active_ingredients = edited_df[edited_df["Rasio Racikan (%)"] > 0]
         ingredients_string = ", ".join([f"{r.get('Nama Raw Material', 'Bahan')} ({r.get('Kategori Notes', 'Note')} - {r.get('Rasio Racikan (%)', 0)}% )" for _, r in active_ingredients.iterrows()])
@@ -219,14 +226,7 @@ with tab2:
         if st.button("✨ Racik Cerita Varian"):
             try:
                 client = genai.Client(api_key=api_key)
-                prompt = f"""
-                Kamu adalah Master Perfumer. Analisis formula komersial ini:
-                Struktur Komponen: {ingredients_string}
-                Target Pasar: {target_pasar}
-                Nuansa Impian: {catatan_tambahan}
-                
-                Buatkan: 3 Opsi Nama Varian Menarik, 2 Paragraf Narasi Filosofi Produk Indah, dan Evaluasi Taktis apakah proporsi kombinasi Top, Heart, dan Base Notes yang diisi user sudah harmonis atau butuh penyesuaian fiksasi. Output dalam Markdown.
-                """
+                prompt = f"Kamu adalah Master Perfumer. Analisis formula komersial ini: Struktur Komponen: {ingredients_string}. Target Pasar: {target_pasar}. Nuansa Impian: {catatan_tambahan}. Buatkan: 3 Opsi Nama Varian Menarik, 2 Paragraf Narasi Filosofi Produk Indah, dan Evaluasi Taktis apakah proporsi kombinasi Top, Heart, dan Base Notes yang diisi user sudah harmonis atau butuh penyesuaian fiksasi. Output dalam Markdown."
                 response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                 st.markdown(response.text)
             except Exception as e: st.error(f"Eror: {e}")
@@ -243,11 +243,11 @@ with tab3:
             material_name = row.get("Nama Raw Material", f"Bahan {idx}")
             vol_dibeli = row.get("Volume Dibeli (ml)", 100.0)
             vol_per_b = row.get("Vol Needed per Bottle (ml)", 0.0)
-            
-            user_stok = current_col.number_input(f"Stok: {material_name} (ml)", min_value=0.0, value=float(vol_dibeli), key=f"stok_v9_{idx}")
+            user_stok = current_col.number_input(f"Stok: {material_name} (ml)", min_value=0.0, value=float(vol_dibeli), key=f"stok_v11_{idx}")
             stok_list.append((material_name, user_stok, vol_per_b))
             count += 1
     if stok_list:
         max_bottles_possible = [stok // vol if vol > 0 else float('inf') for _, stok, vol in stok_list]
         final_max_production = int(min(max_bottles_possible)) if max_bottles_possible else 0
         st.success(f"Batas maksimal produksi riil Anda saat ini adalah **{final_max_production} botol**.")
+ 
