@@ -1,4 +1,24 @@
 import streamlit as st
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == "junior":
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # Menambahkan judul agar terlihat seperti aplikasi profesional
+        st.markdown("<h1 style='text-align: center;'>Pro Perfumer Studio</h1>", unsafe_allow_html=True)
+        st.text_input("Masukkan Akses Kunci:", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.error("Kunci Akses Tidak Valid")
+        st.text_input("Coba masukkan kembali kunci akses:", type="password", on_change=password_entered, key="password")
+        return False
+    else:
+        return True
+
 import pandas as pd
 import json
 from google import genai
