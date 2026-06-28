@@ -307,7 +307,7 @@ with tab_chat:
                 except Exception as e: st.sidebar.error(f"Kesalahan komunikasi sistem: {e}")
 
 # --- TAB ACCORDS PIE CHART ---
-    with tab_acc:
+with tab_acc:
     st.write("### Kluster Roda Aroma (100% Konsentrat)")
     
     # Tambahkan pengecekan data
