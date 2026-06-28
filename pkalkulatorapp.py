@@ -4,8 +4,6 @@ import json
 from google import genai
 import plotly.express as px
 
-st.set_page_config(page_title="Pro Perfumer Studio", layout="wide")
-
 # Fungsi Keamanan Akses
 def check_password():
     def password_entered():
