@@ -4,66 +4,98 @@ from google.genai import types
 
 st.set_page_config(page_title="Fragrance Production & AI Storyteller", layout="wide")
 
-st.title("🧪 Perfume Production, Pricing & AI Storyteller")
-st.write("Hitung formula, HPP, optimasi harga, dan biarkan AI merancang filosofi aroma parfum Anda.")
+st.title("🧪 Custom Perfume Production & Price Optimizer")
+st.write("Input bahan kustom, hitung HPP presisi, dan racik filosofi aroma dengan AI.")
 
-# --- SIDEBAR: INPUT HARGA BAHAN & API KEY ---
-st.sidebar.header("🔑 Konfigurasi & Harga Bahan")
-api_key = st.sidebar.text_input("Google Gemini API Key", type="password", help="Masukkan API Key Anda dari Google AI Studio")
+# --- SIDEBAR: KONFIGURASI API KEY ---
+st.sidebar.header("🔑 Konfigurasi AI")
+api_key = st.sidebar.text_input("Google Gemini API Key", type="password", help="Masukkan API Key dari Google AI Studio")
 
-st.sidebar.markdown("---")
-price_fragrance = st.sidebar.number_input("Harga Bibit Parfum (per ml)", min_value=0, value=1500)
-price_solvent = st.sidebar.number_input("Harga Pelarut/Alkohol (per ml)", min_value=0, value=200)
-price_fixative = st.sidebar.number_input("Harga Fixative (per ml)", min_value=0, value=3000)
-price_bottle = st.sidebar.number_input("Harga Botol + Stiker (per pcs)", min_value=0, value=5000)
+st.markdown("---")
 
-# --- TABS UNTUK FITUR ---
-tab1, tab2, tab3 = st.tabs(["📊 Hitung HPP & Saran Harga Jual", "🔮 AI Filosofi & Notes Parfum", "🤖 Optimasi Stok"])
+# --- INPUT BAHAN KUSTOM ---
+st.header("📦 1. Input Pembelian & Modal Bahan Baku")
+st.write("Masukkan detail bahan yang Anda beli beserta harganya untuk menghitung modal per ml secara otomatis.")
+
+col_b1, col_b2, col_b3 = st.columns(3)
+
+with col_b1:
+    st.subheader("🧪 Bahan 1: Bibit Parfum")
+    name_fragrance = st.text_input("Nama Bibit", value="Bibit Varian A")
+    buy_vol_fragrance = st.number_input("Volume yang Dibeli (ml)", min_value=1, value=100, key="bv_f")
+    buy_price_fragrance = st.number_input("Total Harga Beli (Rp)", min_value=0, value=150000, key="bp_f")
+    # Hitung per ml
+    price_fragrance_per_ml = buy_price_fragrance / buy_vol_fragrance if buy_vol_fragrance > 0 else 0
+    st.caption(f"💰 Modal {name_fragrance}: **Rp {price_fragrance_per_ml:,.1f} / ml**")
+
+with col_b2:
+    st.subheader("💧 Bahan 2: Pelarut / Alkohol")
+    name_solvent = st.text_input("Nama Pelarut", value="Absolute Premium")
+    buy_vol_solvent = st.number_input("Volume yang Dibeli (ml)", min_value=1, value=1000, key="bv_s")
+    buy_price_solvent = st.number_input("Total Harga Beli (Rp)", min_value=0, value=120000, key="bp_s")
+    # Hitung per ml
+    price_solvent_per_ml = buy_price_solvent / buy_vol_solvent if buy_vol_solvent > 0 else 0
+    st.caption(f"💰 Modal {name_solvent}: **Rp {price_solvent_per_ml:,.1f} / ml**")
+
+with col_b3:
+    st.subheader("⚗️ Bahan 3: Fixative / Pengikat")
+    name_fixative = st.text_input("Nama Fixative", value="Fixative Super")
+    buy_vol_fixative = st.number_input("Volume yang Dibeli (ml)", min_value=1, value=50, key="bv_x")
+    buy_price_fixative = st.number_input("Total Harga Beli (Rp)", min_value=0, value=100000, key="bp_x")
+    # Hitung per ml
+    price_fixative_per_ml = buy_price_fixative / buy_vol_fixative if buy_vol_fixative > 0 else 0
+    st.caption(f"💰 Modal {name_fixative}: **Rp {price_fixative_per_ml:,.1f} / ml**")
+
+st.markdown("---")
+
+# --- TABS UTUK FORMULASI & AI ---
+tab1, tab2, tab3 = st.tabs(["📊 Formulasi, HPP & Harga Jual", "🔮 AI Filosofi & Notes", "🤖 Optimasi Sisa Stok"])
 
 with tab1:
-    st.header("Formulasi, HPP & Strategi Harga Jual")
+    st.header("Formulasi & Strategi Harga")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("⚙️ Parameter Produksi")
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        st.subheader("⚙️ Parameter Produksi & Kemasan")
         target_bottles = st.number_input("Target Jumlah Botol", min_value=1, value=10)
         bottle_size = st.number_input("Ukuran Botol (ml)", min_value=5, value=50)
+        price_bottle = st.number_input("Harga Kemasan (Botol + Stiker per pcs)", min_value=0, value=5000)
         
         st.markdown("---")
-        st.subheader("🎯 Target Keuntungan & Harga")
+        st.subheader("🎯 Target Keuntungan")
         pricing_method = st.radio("Metode Penentuan Harga Jual:", ["Target Markup (Kenaikan dari Modal)", "Target Margin Laba Kotor (%)"])
-        
         if pricing_method == "Target Markup (Kenaikan dari Modal)":
             markup_pct = st.slider("Persentase Kenaikan Harga (%)", 50, 500, 200, step=10)
         else:
             margin_pct = st.slider("Target Margin Laba Kotor (%)", 10, 90, 60, step=5)
         
-    with col2:
-        st.subheader("🧪 Rasio Konsentrasi Parfum")
-        pct_fragrance = st.slider("Persentase Bibit Parfum (%)", 0, 100, 30)
-        pct_fixative = st.slider("Persentase Fixative (%)", 0, 10, 2)
+    with col_f2:
+        st.subheader("🧪 Persentase Racikan Racikan (%)")
+        pct_fragrance = st.slider(f"Persentase {name_fragrance} (%)", 0, 100, 30)
+        pct_fixative = st.slider(f"Persentase {name_fixative} (%)", 0, 10, 2)
         pct_solvent = 100 - (pct_fragrance + pct_fixative)
         
         if pct_solvent < 0:
             st.error("⚠️ Total persentase melebihi 100%! Kurangi bibit atau fixative.")
             pct_solvent = 0
         else:
-            st.info(f"Persentase Pelarut Otomatis: {pct_solvent}%")
+            st.info(f"Persentase {name_solvent} Otomatis: {pct_solvent}%")
 
-    # Kalkulasi Finansial
+    # Kalkulasi Volume & Biaya Cairan
     total_volume_needed = target_bottles * bottle_size
     req_fragrance = (pct_fragrance / 100) * total_volume_needed
     req_solvent = (pct_solvent / 100) * total_volume_needed
     req_fixative = (pct_fixative / 100) * total_volume_needed
     
-    cost_fragrance = req_fragrance * price_fragrance
-    cost_solvent = req_solvent * price_solvent
-    cost_fixative = req_fixative * price_fixative
+    cost_fragrance = req_fragrance * price_fragrance_per_ml
+    cost_solvent = req_solvent * price_solvent_per_ml
+    cost_fixative = req_fixative * price_fixative_per_ml
     cost_bottles = target_bottles * price_bottle
     
     total_cost = cost_fragrance + cost_solvent + cost_fixative + cost_bottles
     hpp_per_bottle = total_cost / target_bottles if target_bottles > 0 else 0
 
+    # Kalkulasi Rekomendasi Harga Jual
     if pricing_method == "Target Markup (Kenaikan dari Modal)":
         suggested_price = hpp_per_bottle * (1 + (markup_pct / 100))
     else:
@@ -73,14 +105,15 @@ with tab1:
     total_profit = total_revenue - total_cost
 
     st.markdown("---")
-    res_col1, res_col2 = st.columns(2)
-    with res_col1:
-        st.write(f"**Detail Kebutuhan Bahan (Total: {total_volume_needed} ml):**")
-        st.write(f"* 🧪 Bibit Parfum: **{req_fragrance:.1f} ml**")
-        st.write(f"* 💧 Pelarut/Alkohol: **{req_solvent:.1f} ml**")
-        st.write(f"* ⚗️ Fixative: **{req_fixative:.1f} ml**")
+    res_c1, res_c2 = st.columns(2)
+    with res_c1:
+        st.write(f"**Detail Kebutuhan Total Cairan ({total_volume_needed} ml):**")
+        st.write(f"* 🧪 {name_fragrance}: **{req_fragrance:.1f} ml** (Biaya: Rp {cost_fragrance:,.0f})")
+        st.write(f"* 💧 {name_solvent}: **{req_solvent:.1f} ml** (Biaya: Rp {cost_solvent:,.0f})")
+        st.write(f"* ⚗️ {name_fixative}: **{req_fixative:.1f} ml** (Biaya: Rp {cost_fixative:,.0f})")
+        st.write(f"* 🍾 Kemasan Botol & Stiker: **{target_bottles} pcs** (Biaya: Rp {cost_bottles:,.0f})")
         
-    with res_col2:
+    with res_c2:
         st.metric(label="Harga Pokok Penjualan (HPP) per Botol", value=f"Rp {hpp_per_bottle:,.0f}")
         st.metric(label="💡 Rekomendasi Harga Jual per Botol", value=f"Rp {suggested_price:,.0f}", delta=f"Profit/Botol: Rp {suggested_price - hpp_per_bottle:,.0f}")
         
@@ -93,76 +126,49 @@ with tab1:
 
 with tab2:
     st.header("🔮 AI Fragrance Storyteller")
-    st.write("Gunakan AI untuk menciptakan nama, filosofi mendalam, serta struktur *notes* parfum Anda.")
-    
     if not api_key:
-        st.warning("⚠️ Silakan masukkan Google Gemini API Key di sidebar sebelah kiri untuk menggunakan fitur AI ini.")
+        st.warning("⚠️ Masukkan Google Gemini API Key di sidebar untuk mengaktifkan AI.")
     else:
-        # Input karakteristik aroma dari user
-        aroma_type = st.multiselect(
-            "Pilih Karakter Utama Aroma Parfum Anda:",
-            ["Manis (Sweet/Vanilla)", "Segar/Buah (Fresh/Citrus/Fruit)", "Bunga (Floral)", "Kayu-kayuan (Woody/Oud)", "Rempah (Spicy)", "Mewah/Eksklusif", "Menenangkan (Calm/Powdery)", "Maskulin/Sporty", "Feminin/Anggun"]
-        )
-        
-        target_pasar = st.text_input("Siapa target konsumennya? (Contoh: Wanita karir urban, Anak muda skena, Pria kantoran formal)")
-        catatan_tambahan = st.text_area("Catatan Tambahan untuk AI (Contoh: Ingin ada kesan aroma kopi setelah hujan, atau aroma teh melati mewah)")
+        aroma_type = st.multiselect("Karakter Utama Aroma:", ["Manis (Sweet)", "Segar (Fresh/Citrus)", "Bunga (Floral)", "Kayu (Woody/Oud)", "Rempah (Spicy)", "Mewah", "Calm/Powdery"])
+        target_pasar = st.text_input("Target Konsumen:")
+        catatan_tambahan = st.text_area("Catatan Khusus Varian:")
         
         if st.button("✨ Generasikan Filosofi & Notes"):
             if not aroma_type:
                 st.error("Pilih minimal satu karakter utama aroma!")
             else:
-                with st.spinner("AI sedang meracik cerita dan filosofi untuk parfum Anda..."):
+                with st.spinner("AI sedang meracik cerita varian baru Anda..."):
                     try:
-                        # Inisialisasi client Gemini versi terbaru
                         client = genai.Client(api_key=api_key)
-                        
-                        # Menyusun prompt instruksi untuk AI
-                        prompt = f"""
-                        Kamu adalah seorang Ahli Peracik Parfum (Perfumer) Internasional dan Brand Strategist handal.
-                        Buatkan konsep parfum komersial yang menarik berdasarkan data berikut:
-                        - Karakter Aroma: {', '.join(aroma_type)}
-                        - Target Pasar: {target_pasar if target_pasar else 'Umum'}
-                        - Inspirasi/Catatan Khusus: {catatan_tambahan if catatan_tambahan else 'Tidak ada'}
-                        
-                        Berikan output dengan format Markdown yang rapi:
-                        1. **Rekomendasi Nama Parfum** (Berikan 3 opsi nama yang komersial, modern, dan unik beserta artinya singkat).
-                        2. **Filosofi Parfum** (Sebuah narasi cerita/filosofi puitis yang mendalam tentang makna di balik keharuman parfum ini, sangat cocok untuk deskripsi jualan atau konten marketing).
-                        3. **Rincian Parfum Notes**: Break down aroma ini secara logis dan harmonis ke dalam:
-                           - *Top Notes* (Aroma yang pertama kali tercium saat disemprot)
-                           - *Heart/Middle Notes* (Inti dari karakter parfum setelah beberapa menit)
-                           - *Base Notes* (Aroma dasar yang tertinggal paling lama dan mengunci keharuman)
-                        """
-                        
-                        # Memanggil model Gemini 2.5 Flash yang cepat dan cerdas
-                        response = client.models.generate_content(
-                            model='gemini-2.5-flash',
-                            contents=prompt,
-                        )
-                        
+                        prompt = f"Buatkan nama (3 opsi), filosofi puitis, dan rincian Top, Middle, Base notes untuk parfum berkarakter {', '.join(aroma_type)} dengan target pasar {target_pasar}. Catatan: {catatan_tambahan}"
+                        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                         st.markdown("---")
                         st.success("🎉 Konsep Parfum Berhasil Dibuat!")
                         st.markdown(response.text)
-                        
                     except Exception as e:
-                        st.error(f"Terjadi kesalahan saat menghubungi AI: {e}")
+                        st.error(f"Terjadi kesalahan: {e}")
 
 with tab3:
-    st.header("Smart Stock Optimizer")
-    # (Kode pencarian bottleneck sisa stok tetap sama seperti versi sebelumnya)
-    stok_fragrance = st.number_input("Sisa Stok Bibit Parfum (ml)", min_value=0.0, value=500.0)
-    stok_solvent = st.number_input("Sisa Stok Pelarut (ml)", min_value=0.0, value=1000.0)
-    stok_fixative = st.number_input("Sisa Stok Fixative (ml)", min_value=0.0, value=100.0)
-    target_size = st.selectbox("Pilih Ukuran Botol Target (ml)", [30, 50, 100], index=1)
+    st.header("🤖 Smart Stock Optimizer")
+    st.write("Gunakan sisa total stok bahan yang Anda miliki saat ini untuk mengetahui batas maksimal produksi.")
     
-    vol_fragrance_per_bottle = (pct_fragrance / 100) * target_size
-    vol_solvent_per_bottle = (pct_solvent / 100) * target_size
-    vol_fixative_per_bottle = (pct_fixative / 100) * target_size
+    opt_c1, opt_c2 = st.columns(2)
+    with opt_c1:
+        stok_f = st.number_input(f"Sisa Stok {name_fragrance} yang Dimiliki (ml)", min_value=0.0, value=float(buy_vol_fragrance))
+        stok_s = st.number_input(f"Sisa Stok {name_solvent} yang Dimiliki (ml)", min_value=0.0, value=float(buy_vol_solvent))
+        stok_x = st.number_input(f"Sisa Stok {name_fixative} yang Dimiliki (ml)", min_value=0.0, value=float(buy_vol_fixative))
+    with opt_c2:
+        target_size = st.selectbox("Pilih Ukuran Botol Target Produksi (ml)", [30, 50, 100], index=1)
+        
+    vol_f_per_b = (pct_fragrance / 100) * target_size
+    vol_s_per_b = (pct_solvent / 100) * target_size
+    vol_x_per_b = (pct_fixative / 100) * target_size
     
-    max_by_fragrance = stok_fragrance // vol_fragrance_per_bottle if vol_fragrance_per_bottle > 0 else 0
-    max_by_solvent = stok_solvent // vol_solvent_per_bottle if vol_solvent_per_bottle > 0 else 0
-    max_by_fixative = stok_fixative // vol_fixative_per_bottle if vol_fixative_per_bottle > 0 else 0
+    max_f = stok_f // vol_f_per_b if vol_f_per_b > 0 else 0
+    max_s = stok_s // vol_s_per_b if vol_s_per_b > 0 else 0
+    max_x = stok_x // vol_x_per_b if vol_x_per_b > 0 else 0
     
-    max_production = int(min(max_by_fragrance, max_by_solvent, max_by_fixative))
+    max_production = int(min(max_f, max_s, max_x))
     
     st.markdown("---")
-    st.success(f"Anda dapat meracik maksimal **{max_production} botol** ukuran {target_size} ml.")
+    st.success(f"Berdasarkan sisa bahan paling terbatas, Anda dapat meracik maksimal **{max_production} botol** ukuran {target_size} ml.")
