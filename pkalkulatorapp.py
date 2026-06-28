@@ -2,11 +2,12 @@ import streamlit as st
 import pandas as pd
 import json
 from google import genai
+import plotly.express as px
 
 st.set_page_config(page_title="UCP ALPHA - Pro Perfumer Studio", layout="wide")
 
-st.title("🧪 UCP ALPHA - Pro Perfumer Studio v18")
-st.write("Studio Formulasi dengan Visualisasi Roda Aroma Lingkaran, Pemetaan Aroma Kompleks AI, dan HPP Presisi.")
+st.title("🧪 UCP ALPHA - Pro Perfumer Studio v19")
+st.write("Studio Formulasi dengan Roda Aroma Lingkaran Plotly (100% Komposisi Aroma murni), AI Mapping, dan HPP Presisi.")
 
 # --- SIDEBAR: KONFIGURASI AI ---
 st.sidebar.header("🔑 Konfigurasi AI")
@@ -110,7 +111,7 @@ edited_df["Modal per ml (Rp)"] = edited_df["Harga Beli (Rp)"] / edited_df["Volum
 total_percentage = edited_df["Rasio Racikan (%)"].sum()
 st.markdown("---")
 
-# --- 🌟 FUNGSI CACHE AI: DETEKSI AROMA LEBIH KOMPLEKS (BISA MULTI-ACCORDS PER BAHAN) ---
+# --- FUNGSI CACHE AI ---
 @st.cache_data
 def get_ai_complex_accords(materials_list, api_key_input):
     if not api_key_input or not materials_list:
@@ -121,10 +122,8 @@ def get_ai_complex_accords(materials_list, api_key_input):
         prompt = f"""
         Kamu adalah sistem laboratorium perfumery internasional tingkat lanjut. Tugasmu mengelompokkan molekul raw material ke dalam rumpun aroma utama (Main Accords) yang kompleks berdasarkan profil olfaktori kimiawinya.
         Daftar komponen: [{materials_json_input}]
-        
         Bahan bisa memiliki lebih dari 1 karakter aroma (Maksimal 3 karakter aroma yang relevan, urutkan dari yang paling dominan).
         Pilihan kategori aroma resmi: [Citrus, Floral, Woody, Amber, Animalic, Green, Fruity, Musky, Spicy, Sweet / Vanilla, Powdery, Leather, Neutral].
-        
         Berikan hasil analisis HANYA dalam bentuk valid JSON object bersih dengan format seperti contoh berikut (tanpa markdown codeblock dan tanpa teks penjelasan apa pun):
         {{"Ambroxan": ["Amber", "Musky", "Woody"], "Bergamot Oil": ["Citrus"], "Absolute/Pelarut": ["Neutral"]}}
         """
@@ -145,7 +144,6 @@ total_fixative_tabel_pct = edited_df.loc[fixative_mask, "Rasio Racikan (%)"].sum
 
 bottle_size_actual = 50.0
 
-# Distribusi cairan internal untuk penyelarasan visualisasi persentase riil
 edited_df["Vol Needed per Bottle (ml)"] = 0.0
 if auto_scale and total_fragrance_tabel_pct > 0:
     target_non_fragrance = 100.0 - target_essential_oil
@@ -171,7 +169,7 @@ tab_enc, tab_sec, tab0, tab1, tab2 = st.tabs([
     "🤖 Kontrol Sisa Stok"
 ])
 
-# --- 🌟 TAB 1: VISUALISASI LINGKARAN DENGAN MATRIKS LEBIH KOMPLEKS ---
+# --- TAB 1: VISUALISASI PIE CHART 100% MURNI AROMA ---
 with tab_enc:
     st.header("📐 Analisis Roda Aroma Lingkaran Kompleks (AI Fragrantica Pie Chart)")
     active_materials = edited_df[edited_df["Rasio Racikan (%)"] > 0]["Nama Raw Material"].tolist()
@@ -181,71 +179,65 @@ with tab_enc:
     elif not active_materials:
         st.info("Masukkan komponen bahan yang aktif di tabel atas untuk memetakan roda lingkaran aroma.")
     else:
-        # Memanggil fungsi analisis aroma kompleks
         ai_complex_mapping = get_ai_complex_accords(active_materials, api_key)
         
         if ai_complex_mapping:
-            # Membangun daftar accord terdistribusi secara matematis di dalam diagram
             accord_rows = []
-            
             for idx, row in edited_df.iterrows():
                 mat_name = row["Nama Raw Material"]
                 pct_val = row["Persentase Aktual Di Botol (%)"]
                 
                 if mat_name in ai_complex_mapping and pct_val > 0:
                     assigned_accords = ai_complex_mapping[mat_name]
-                    # Jika bahan memiliki 2 atau 3 nuansa aroma, bobot persentase dibagi rata secara berjenjang
                     num_accords = len(assigned_accords)
                     
                     if num_accords == 1:
-                        accord_rows.append({"Accords": assigned_accords[0], "Persentase": pct_val})
+                        accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val})
                     elif num_accords == 2:
-                        accord_rows.append({"Accords": assigned_accords[0], "Persentase": pct_val * 0.65}) # Dominan 65%
-                        accord_rows.append({"Accords": assigned_accords[1], "Persentase": pct_val * 0.35}) # Sub-notes 35%
+                        accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val * 0.65})
+                        accord_rows.append({"Accords": assigned_accords[1], "Persentase Raw": pct_val * 0.35})
                     elif num_accords == 3:
-                        accord_rows.append({"Accords": assigned_accords[0], "Persentase": pct_val * 0.50}) # Dominan 50%
-                        accord_rows.append({"Accords": assigned_accords[1], "Persentase": pct_val * 0.30}) # Mid-tones 30%
-                        accord_rows.append({"Accords": assigned_accords[2], "Persentase": pct_val * 0.20}) # Hint 20%
+                        accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val * 0.50})
+                        accord_rows.append({"Accords": assigned_accords[1], "Persentase Raw": pct_val * 0.30})
+                        accord_rows.append({"Accords": assigned_accords[2], "Persentase Raw": pct_val * 0.20})
             
             if accord_rows:
                 accords_df = pd.DataFrame(accord_rows)
-                # Menyaring zat penetral cair dari tampilan grafik roda aroma penciuman
+                # 🚫 MENYARING ZAT NETRAL KELUAR DARI OPERASI MATEMATIKA AROMA
                 accords_df = accords_df[accords_df["Accords"] != "Neutral"]
                 
                 if not accords_df.empty:
-                    final_chart_data = accords_df.groupby("Accords")["Persentase"].sum().reset_index()
-                    final_chart_data = final_chart_data.sort_values(by="Persentase", ascending=False)
+                    # Menghitung total porsi kelompok aroma murni sebagai basis normalisasi
+                    total_pure_fragrance_sum = accords_df["Persentase Raw"].sum()
                     
-                    # 🥧 INTEGRASI DIAGRAM LINGKARAN MENGGUNAKAN STREAMLIT GRAPH NATIVE
-                    st.write("📊 **Roda Karakter Wewangian Aktual Di Dalam Botol (Urutan Terkuat):**")
-                    
-                    # Karena streamlit bawaan st.bar_chart adalah bar, untuk pie chart yang interaktif, bersih, 
-                    # dan responsif di android, kita tampilkan dalam bentuk data editor ter-grafik terurut yang elegan
-                    st.dataframe(
-                        final_chart_data,
-                        column_config={
-                            "Persentase": st.column_config.ProgressColumn(
-                                "Intensitas Kekuatan Aroma dalam Batch",
-                                help="Proporsi penyebaran molekul aroma",
-                                format="%.1f %%",
-                                min_value=0,
-                                max_value=100,
-                            )
-                        },
-                        hide_index=True,
-                        use_container_width=True
-                    )
-                    
-                    # Tambahan visualisasi horizontal terdistribusi
-                    st.markdown("---")
-                    st.write("**📌 Peta Kompleksitas Faset Olfaktori Komponen Anda:**")
-                    for k, v in ai_complex_mapping.items():
-                        if "Neutral" not in v:
-                            st.caption(f"* **{k}** dievaluasi memiliki karakter berlapis: **{', '.join(v)}**")
+                    if total_pure_fragrance_sum > 0:
+                        # 💥 LOGIKA BARU: Normalisasi setiap baris aroma agar jika digabung nilainya pas 100%
+                        accords_df["Persentase Aroma Komposisi (%)"] = (accords_df["Persentase Raw"] / total_pure_fragrance_sum) * 100
+                        
+                        final_chart_data = accords_df.groupby("Accords")["Persentase Aroma Komposisi (%)"].sum().reset_index()
+                        final_chart_data = final_chart_data.sort_values(by="Persentase Aroma Komposisi (%)", ascending=False)
+                        
+                        # 🥧 RENDERING PLOTLY PIE CHART JAUH LEBIH INTERAKTIF & BERWARNA
+                        st.write("📊 **Roda Komposisi Karakter Aroma Utama (Total Distribusi Pas 100%):**")
+                        
+                        fig = px.pie(
+                            final_chart_data, 
+                            values="Persentase Aroma Komposisi (%)", 
+                            names="Accords", 
+                            hole=0.4, # Membuat gaya Donut Chart mewah ala modern UI
+                            color_discrete_sequence=px.colors.qualitative.Pastel
+                        )
+                        fig.update_traces(textinfo="percent+label", textposition="inside")
+                        fig.update_layout(showlegend=True, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Tabel pelengkap data di bawahnya
+                        st.write("**📋 Rincian Kontribusi Faset Aroma Terurut:**")
+                        st.dataframe(final_chart_data, hide_index=True, use_container_width=True)
                 else:
-                    st.info("Seluruh komponen saat ini dideteksi sebagai cairan pembawa/netral.")
+                    st.info("Seluruh komponen diidentifikasi sebagai zat netral/pelarut.")
         else:
-            st.info("AI sedang menyelaraskan matriks kompleksitas kimia aroma...")
+            st.info("AI sedang merelasikan parameter struktur aroma komponen Anda...")
 
 # --- TAB ENSIKLOPEDIA ---
 with tab_sec:
@@ -343,7 +335,7 @@ with tab2:
     for idx, row in edited_df.iterrows():
         if row["Vol Needed per Bottle (ml)"] > 0:
             current_col = opt_cols[0] if count % 2 == 0 else opt_cols[1]
-            user_stok = current_col.number_input(f"Sisa Stok Berjalan: {row['Nama Raw Material']} (ml)", min_value=0.0, value=float(row['Volume Dibeli (ml)']), key=f"stok_v18_{idx}")
+            user_stok = current_col.number_input(f"Sisa Stok Berjalan: {row['Nama Raw Material']} (ml)", min_value=0.0, value=float(row['Volume Dibeli (ml)']), key=f"stok_v19_{idx}")
             stok_list.append((row['Nama Raw Material'], user_stok, row['Vol Needed per Bottle (ml)']))
             count += 1
     if stok_list:
