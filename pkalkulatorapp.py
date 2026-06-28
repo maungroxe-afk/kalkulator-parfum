@@ -352,11 +352,6 @@ with tab_enc:
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("Karakter aroma belum terdeteksi. Pastikan data bahan Anda memiliki kategori yang sesuai.")
- 
-                        # Mengubah palet warna grafik lingkaran menjadi monokrom/muted tone agar terkesan mahal
-                        fig = px.pie(final_chart_data, values="Persentase Aroma Komposisi (%)", names="Accords", hole=0.5, color_discrete_sequence=px.colors.sequential.Burgyl)
-                        fig.update_traces(textinfo="percent+label", textposition="outside")
-                        st.plotly_chart(fig, use_container_width=True)
 
 # --- TAB ENSIKLOPEDIA ---
 with tab_sec:
