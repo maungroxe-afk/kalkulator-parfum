@@ -4,7 +4,7 @@ from google import genai
 
 st.set_page_config(page_title="UCP ALPHA - Pro Perfumer Studio", layout="wide")
 
-st.title("🧪 UCP ALPHA - Pro Perfumer Studio v8")
+st.title("🧪 UCP ALPHA - Pro Perfumer Studio v9")
 st.write("Formulasi tingkat lanjut dengan pembagian Top, Heart, Base Notes, Asisten AI, dan Visualisasi Piramida Aroma.")
 
 # --- SIDEBAR: KONFIGURASI AI ---
@@ -45,24 +45,45 @@ initial_data = {
     "Harga Beli (Rp)": [150000, 250000, 200000, 120000, 150000],
     "Rasio Racikan (%)": [10.0, 10.0, 10.0, 68.0, 2.0]
 }
+df_template = pd.DataFrame(initial_data)
 
 if uploaded_file is not None:
     try:
         if uploaded_file.name.endswith('.csv'):
-            df_template = pd.read_csv(uploaded_file)
+            uploaded_df = pd.read_csv(uploaded_file)
         else:
-            df_template = pd.read_excel(uploaded_file)
-        st.success("✅ Data berhasil dimuat dari file!")
+            uploaded_df = pd.read_excel(uploaded_file)
+        
+        # LOGIKA PERBAIKAN: Menyelaraskan nama kolom secara otomatis jika tidak pas
+        rename_dict = {}
+        for col in uploaded_df.columns:
+            col_clean = str(col).strip().lower()
+            if "nama" in col_clean or "material" in col_clean or "bahan" in col_clean:
+                rename_dict[col] = "Nama Raw Material"
+            elif "kategori" in col_clean or "notes" in col_clean or "jenis" in col_clean:
+                rename_dict[col] = "Kategori Notes"
+            elif "volume" in col_clean or "vol" in col_clean:
+                rename_dict[col] = "Volume Dibeli (ml)"
+            elif "harga" in col_clean or "beli" in col_clean or "modal" in col_clean:
+                rename_dict[col] = "Harga Beli (Rp)"
+            elif "rasio" in col_clean or "racikan" in col_clean or "persen" in col_clean or "%" in col_clean:
+                rename_dict[col] = "Rasio Racikan (%)"
+        
+        uploaded_df = uploaded_df.rename(columns=rename_dict)
+        
+        # Memastikan kolom yang wajib ada tetap tersedia di dataframe
+        for required_col in df_template.columns:
+            if required_col not in uploaded_df.columns:
+                uploaded_df[required_col] = df_template[required_col] if required_col == "Kategori Notes" else 0.0
+                
+        df_template = uploaded_df[df_template.columns]
+        st.success("✅ Data berhasil dimuat dan disesuaikan secara otomatis!")
     except Exception as e:
-        st.error(f"Gagal membaca file: {e}")
-        df_template = pd.DataFrame(initial_data)
-else:
-    df_template = pd.DataFrame(initial_data)
+        st.error(f"Gagal membaca file: {e}. Menggunakan template bawaan.")
 
 st.subheader("📊 Tabel Formulasi Bahan Baku")
 st.write("Klik dua kali pada kolom 'Kategori Notes' untuk memilih peran bahan wewangian Anda.")
 
-# Data editor dengan pilihan drop-down kategori notes baru
 edited_df = st.data_editor(
     df_template, 
     num_rows="dynamic", 
@@ -77,6 +98,11 @@ edited_df = st.data_editor(
         "Rasio Racikan (%)": st.column_config.NumberColumn(format="%.2f %%")
     }
 )
+
+# Menghitung modal dasar per ml
+edited_df["Volume Dibeli (ml)"] = pd.to_numeric(edited_df["Volume Dibeli (ml)"], errors='coerce').fillna(1.0)
+edited_df["Harga Beli (Rp)"] = pd.to_numeric(edited_df["Harga Beli (Rp)"], errors='coerce').fillna(0.0)
+edited_df["Rasio Racikan (%)"] = pd.to_numeric(edited_df["Rasio Racikan (%)"], errors='coerce').fillna(0.0)
 
 edited_df["Modal per ml (Rp)"] = edited_df["Harga Beli (Rp)"] / edited_df["Volume Dibeli (ml)"]
 edited_df["Modal per ml (Rp)"] = edited_df["Modal per ml (Rp)"].fillna(0)
@@ -133,7 +159,6 @@ with tab0:
 with tab1:
     st.header("Analisis HPP & Harga Jual")
     
-    # Diagram Komposisi Notes Parfum yang diperbarui
     if total_percentage > 0:
         st.write("📐 **Struktur Piramida Aroma Terpeta (Diagram Batang):**")
         notes_summary = edited_df.groupby("Kategori Notes")["Rasio Racikan (%)"].sum().reset_index()
@@ -169,9 +194,14 @@ with tab1:
     res_c1, res_c2 = st.columns(2)
     with res_c1:
         st.write("📋 **Rincian Takaran Racikan per Botol:**")
+        # Perbaikan proteksi pembacaan baris yang aman
         for _, row in edited_df.iterrows():
-            if row["Rasio Racikan (%)"] > 0:
-                st.write(f"* **{row['Nama Raw Material']}** ({row['Kategori Notes']}): {row['Vol Needed per Bottle (ml)']:.2f} ml (Biaya: Rp {row['Cost per Bottle (Rp)']:,.0f})")
+            if "Rasio Racikan (%)" in row and row["Rasio Racikan (%)"] > 0:
+                material_name = row.get("Nama Raw Material", "Bahan Tanpa Nama")
+                note_cat = row.get("Kategori Notes", "Uncategorized")
+                vol_needed = row.get("Vol Needed per Bottle (ml)", 0.0)
+                cost_b = row.get("Cost per Bottle (Rp)", 0.0)
+                st.write(f"* **{material_name}** ({note_cat}): {vol_needed:.2f} ml (Biaya: Rp {cost_b:,.0f})")
     with res_c2:
         st.metric(label="Harga Pokok Penjualan (HPP) per Botol", value=f"Rp {hpp_per_bottle:,.0f}")
         st.metric(label="💡 Saran Harga Jual Komersial", value=f"Rp {suggested_price:,.0f}", delta=f"Laba Kotor/Botol: Rp {suggested_price - hpp_per_bottle:,.0f}")
@@ -183,7 +213,7 @@ with tab2:
         st.warning("⚠️ Masukkan API Key.")
     else:
         active_ingredients = edited_df[edited_df["Rasio Racikan (%)"] > 0]
-        ingredients_string = ", ".join([f"{r['Nama Raw Material']} ({r['Kategori Notes']} - {r['Rasio Racikan (%)']}% )" for _, r in active_ingredients.iterrows()])
+        ingredients_string = ", ".join([f"{r.get('Nama Raw Material', 'Bahan')} ({r.get('Kategori Notes', 'Note')} - {r.get('Rasio Racikan (%)', 0)}% )" for _, r in active_ingredients.iterrows()])
         target_pasar = st.text_input("Spesifikasi Target Pasar:")
         catatan_tambahan = st.text_area("Nuansa / Kesan Emosional Varian:")
         if st.button("✨ Racik Cerita Varian"):
@@ -210,8 +240,12 @@ with tab3:
     for idx, row in edited_df.iterrows():
         if row["Rasio Racikan (%)"] > 0:
             current_col = opt_cols[0] if count % 2 == 0 else opt_cols[1]
-            user_stok = current_col.number_input(f"Stok: {row['Nama Raw Material']} (ml)", min_value=0.0, value=float(row['Volume Dibeli (ml)']), key=f"stok_v8_{idx}")
-            stok_list.append((row['Nama Raw Material'], user_stok, row['Vol Needed per Bottle (ml)']))
+            material_name = row.get("Nama Raw Material", f"Bahan {idx}")
+            vol_dibeli = row.get("Volume Dibeli (ml)", 100.0)
+            vol_per_b = row.get("Vol Needed per Bottle (ml)", 0.0)
+            
+            user_stok = current_col.number_input(f"Stok: {material_name} (ml)", min_value=0.0, value=float(vol_dibeli), key=f"stok_v9_{idx}")
+            stok_list.append((material_name, user_stok, vol_per_b))
             count += 1
     if stok_list:
         max_bottles_possible = [stok // vol if vol > 0 else float('inf') for _, stok, vol in stok_list]
