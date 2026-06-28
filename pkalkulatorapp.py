@@ -1,16 +1,23 @@
 import streamlit as st
+import pandas as pd
+import json
+from google import genai
+import plotly.express as px
+
+st.set_page_config(page_title="Pro Perfumer Studio", layout="wide")
+
+# Fungsi Keamanan Akses
 def check_password():
     def password_entered():
-        if st.session_state["password"] == "junior":
+        if st.session_state["password"] == "junior: # Ganti password Anda di sini
             st.session_state["password_correct"] = True
             del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        # Menambahkan judul agar terlihat seperti aplikasi profesional
         st.markdown("<h1 style='text-align: center;'>Pro Perfumer Studio</h1>", unsafe_allow_html=True)
-        st.text_input("Masukkan Akses Kunci:", type="password", on_change=password_entered, key="password")
+        st.text_input("Masukkan Kunci Akses:", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
         st.error("Kunci Akses Tidak Valid")
@@ -19,11 +26,55 @@ def check_password():
     else:
         return True
 
-import pandas as pd
-import json
-from google import genai
-import plotly.express as px
+if not check_password():
+    st.stop()
 
+# Judul Utama
+st.title("Pro Perfumer Studio V.22")
+
+# --- CSS MINIMALIS ---
+st.markdown("""
+    <style>
+    .note-box { padding: 18px; border-radius: 6px; border-left: 3px solid #d4af37; background-color: #1a1c23; margin-bottom: 12px; }
+    .note-title { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #d4af37; }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- FUNGSI AI TERPUSAT DENGAN ERROR HANDLING ---
+def panggil_ai(prompt):
+    try:
+        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else st.sidebar.text_input("API Key", type="password"))
+        return client.models.generate_content(model='gemini-2.5-flash', contents=prompt).text
+    except Exception as e:
+        if "429" in str(e):
+            return "ERROR_429" # Kode untuk kuota penuh
+        return f"Kesalahan Sistem: {e}"
+
+# --- LOGIKA APLIKASI (TAB & DATA EDITOR) ---
+# ... (masukkan kode data editor dan perhitungan HPP yang ada sebelumnya di sini) ...
+
+# --- CONTOH PENERAPAN DI TAB CHAT ---
+with tab_chat:
+    if st.button("Analisis Formula"):
+        with st.spinner("AI sedang meracik narasi..."):
+            hasil = panggil_ai("Analisis formula ini: " + formula_summary_string)
+            if hasil == "ERROR_429":
+                st.warning("AI sedang sibuk, mohon tunggu 1 menit.")
+            elif "Kesalahan" in hasil:
+                st.error(hasil)
+            else:
+                st.markdown(hasil)
+
+# --- CONTOH PENERAPAN DI TAB ENSKLOPEDIA ---
+with tab_sec:
+    bahan = st.text_input("Cari bahan:")
+    if st.button("Cari"):
+        with st.spinner("Mencari..."):
+            hasil = panggil_ai(f"Jelaskan bahan {bahan}")
+            if hasil == "ERROR_429":
+                st.warning("Kuota penuh, coba lagi nanti.")
+            else:
+                st.write(hasil)
 # Konfigurasi halaman dasar
 st.set_page_config(page_title="Perfumer Studio", layout="wide")
 
