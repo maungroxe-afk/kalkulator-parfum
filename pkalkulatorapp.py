@@ -309,42 +309,54 @@ with tab_chat:
 # --- TAB ACCORDS PIE CHART ---
 with tab_enc:
     st.header("Analisis Kluster Roda Aroma")
-    if not api_key: st.warning("Masukkan API Key di sidebar.")
-    elif not active_materials: st.info("Masukkan komponen bahan yang aktif di tabel atas.")
+    
+    if not api_key:
+        st.warning("Masukkan API Key di sidebar untuk mengaktifkan analisis AI.")
+    elif edited_df[edited_df["Rasio Racikan (%)"] > 0].empty:
+        st.info("Silakan masukkan data bahan dan rasio racikan pada tabel utama untuk melihat roda aroma.")
     else:
-        ai_complex_mapping = get_ai_complex_accords(active_materials, api_key)
-        if ai_complex_mapping:
-            accord_rows = []
-            for idx, row in edited_df.iterrows():
-                mat_name = row["Nama Raw Material"]
-                pct_val = row["Persentase Aktual Di Botol (%)"]
-                if mat_name in ai_complex_mapping and pct_val > 0:
-                    assigned_accords = ai_complex_mapping[mat_name]
-                    num_accords = len(assigned_accords)
-                    if num_accords == 1:
-                        accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val})
-                    elif num_accords == 2:
-                        accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val * 0.65})
-                        accord_rows.append({"Accords": assigned_accords[1], "Persentase Raw": pct_val * 0.35})
-                    elif num_accords == 3:
-                        accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val * 0.50})
-                        accord_rows.append({"Accords": assigned_accords[1], "Persentase Raw": pct_val * 0.30})
-                        accord_rows.append({"Accords": assigned_accords[2], "Persentase Raw": pct_val * 0.20})
-            if accord_rows:
-                accords_df = pd.DataFrame(accord_rows)
-                accords_df = accords_df[accords_df["Accords"] != "Neutral"]
-                if not accords_df.empty:
-                    total_pure_fragrance_sum = accords_df["Persentase Raw"].sum()
-                    if total_pure_fragrance_sum > 0:
-                        accords_df["Persentase Aroma Komposisi (%)"] = (accords_df["Persentase Raw"] / total_pure_fragrance_sum) * 100
-                        final_chart_data = accords_df.groupby("Accords")["Persentase Aroma Komposisi (%)"].sum().reset_index()
-                        final_chart_data = final_chart_data.sort_values(by="Persentase Aroma Komposisi (%)", ascending=False)
-                        
-                        # Mengubah palet warna grafik lingkaran menjadi monokrom/muted tone agar terkesan mahal
-                        fig = px.pie(final_chart_data, values="Persentase Aroma Komposisi (%)", names="Accords", hole=0.5, color_discrete_sequence=px.colors.sequential.Burgyl)
-                        fig.update_traces(textinfo="percent+label", textposition="outside")
-                        st.plotly_chart(fig, use_container_width=True)
-
+        with st.spinner("Menganalisis profil olfaktori..."):
+            # Pastikan fungsi AI dipanggil dengan benar
+            ai_complex_mapping = get_ai_complex_accords(active_materials, api_key)
+            
+            if ai_complex_mapping:
+                accord_rows = []
+                for _, row in edited_df.iterrows():
+                    mat_name = row["Nama Raw Material"]
+                    pct_val = row["Persentase Aktual Di Botol (%)"]
+                    if mat_name in ai_complex_mapping and pct_val > 0:
+                        assigned_accords = ai_complex_mapping[mat_name]
+                        # Logika pembagian persentase untuk setiap accord
+                        share = pct_val / len(assigned_accords)
+                        for accord in assigned_accords:
+                            accord_rows.append({"Accords": accord, "Persentase": share})
+                
+                if accord_rows:
+                    accords_df = pd.DataFrame(accord_rows)
+                    final_chart_data = accords_df.groupby("Accords")["Persentase"].sum().reset_index()
+                    
+                    # Membuat visualisasi diagram lingkaran (donut chart)
+                    fig = px.pie(
+                        final_chart_data, 
+                        values="Persentase", 
+                        names="Accords", 
+                        hole=0.4,
+                        color_discrete_sequence=px.colors.sequential.RdBu
+                    )
+                    
+                    fig.update_layout(
+                        margin=dict(t=0, b=0, l=0, r=0),
+                        showlegend=True,
+                        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.success("Analisis profil aroma berhasil dipetakan.")
+                else:
+                    st.error("Data aroma tidak dapat dikelompokkan. Pastikan bahan baku sudah terisi dengan benar.")
+            else:
+                st.error("Gagal mendapatkan respons dari sistem AI. Periksa koneksi API Anda.")
+                
 # --- TAB ENSIKLOPEDIA ---
 with tab_sec:
     st.header("Ensiklopedia Komponen & Batas Regulasi")
