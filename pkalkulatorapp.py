@@ -157,19 +157,34 @@ total_percentage = edited_df["Rasio Racikan (%)"].sum()
 st.markdown("<hr>", unsafe_allow_html=True)
 
 # --- FUNGSI CACHE AI ---
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_ai_complex_accords(materials_list, api_key_input):
     if not api_key_input or not materials_list:
-        return {}
+        return None
+    
     try:
         client = genai.Client(api_key=api_key_input)
+        # Mengonversi list menjadi string untuk prompt
         materials_json_input = ", ".join(materials_list)
-        prompt = f"Kamu adalah sistem laboratorium perfumery internasional. Tugasmu mengelompokkan molekul raw material ke dalam rumpun aroma utama (Main Accords) yang kompleks berdasarkan profil olfaktori kimiawinya. Daftar komponen: [{materials_json_input}]. Bahan bisa memiliki lebih dari 1 karakter aroma (Maksimal 3). Pilihan kategori aroma resmi: [Citrus, Floral, Woody, Amber, Animalic, Green, Fruity, Musky, Spicy, Sweet / Vanilla, Powdery, Leather, Neutral]. Berikan hasil analisis HANYA dalam bentuk valid JSON object bersih dengan format seperti contoh berikut tanpa markdown codeblock dan tanpa teks penjelasan apa pun: {{\"Ambroxan\": [\"Amber\", \"Musky\"]}}"
+        
+        prompt = (
+            f"Analisis daftar bahan parfum berikut: [{materials_json_input}]. "
+            "Kelompokkan ke dalam kategori: [Citrus, Floral, Woody, Amber, Animalic, Green, Fruity, Musky, Spicy, Sweet, Powdery, Leather]. "
+            "Berikan output HANYA berupa JSON valid tanpa markdown atau teks penjelasan. "
+            "Contoh format: {\"Ambroxan\": [\"Amber\"], \"Peach\": [\"Fruity\"]}"
+        )
+        
         response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        
+        # Membersihkan output dari potensi kode markdown
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
+        
         return json.loads(clean_text)
-    except:
-        return {}
+        
+    except Exception as e:
+        # Menampilkan pesan error di sidebar agar tidak merusak tampilan utama
+        st.sidebar.error(f"Koneksi API Gagal: {str(e)}")
+        return None
 
 # --- ⚙️ LOGIKA OTOMATISASI KONSENTRASI PARFUM ---
 fragrance_mask = edited_df["Kategori Notes (Manual/Bebas)"].isin(["Top Notes", "Heart Notes", "Base Notes"])
