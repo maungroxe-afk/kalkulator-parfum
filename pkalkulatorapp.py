@@ -6,8 +6,8 @@ import plotly.express as px
 
 st.set_page_config(page_title="UCP ALPHA - Pro Perfumer Studio", layout="wide")
 
-st.title("🧪 UCP ALPHA - Pro Perfumer Studio v19")
-st.write("Studio Formulasi dengan Roda Aroma Lingkaran Plotly (100% Komposisi Aroma murni), AI Mapping, dan HPP Presisi.")
+st.title("🧪 UCP ALPHA - Pro Perfumer Studio v20")
+st.write("Studio Formulasi Parfum Komplit dengan AI Fragrance Copilot Chat Interaktif, Plotly Roda Aroma, dan HPP Presisi.")
 
 # --- SIDEBAR: KONFIGURASI AI ---
 st.sidebar.header("🔑 Konfigurasi AI")
@@ -119,14 +119,7 @@ def get_ai_complex_accords(materials_list, api_key_input):
     try:
         client = genai.Client(api_key=api_key_input)
         materials_json_input = ", ".join(materials_list)
-        prompt = f"""
-        Kamu adalah sistem laboratorium perfumery internasional tingkat lanjut. Tugasmu mengelompokkan molekul raw material ke dalam rumpun aroma utama (Main Accords) yang kompleks berdasarkan profil olfaktori kimiawinya.
-        Daftar komponen: [{materials_json_input}]
-        Bahan bisa memiliki lebih dari 1 karakter aroma (Maksimal 3 karakter aroma yang relevan, urutkan dari yang paling dominan).
-        Pilihan kategori aroma resmi: [Citrus, Floral, Woody, Amber, Animalic, Green, Fruity, Musky, Spicy, Sweet / Vanilla, Powdery, Leather, Neutral].
-        Berikan hasil analisis HANYA dalam bentuk valid JSON object bersih dengan format seperti contoh berikut (tanpa markdown codeblock dan tanpa teks penjelasan apa pun):
-        {{"Ambroxan": ["Amber", "Musky", "Woody"], "Bergamot Oil": ["Citrus"], "Absolute/Pelarut": ["Neutral"]}}
-        """
+        prompt = f"Kamu adalah sistem laboratorium perfumery internasional. Tugasmu mengelompokkan molekul raw material ke dalam rumpun aroma utama (Main Accords) yang kompleks berdasarkan profil olfaktori kimiawinya. Daftar komponen: [{materials_json_input}]. Bahan bisa memiliki lebih dari 1 karakter aroma (Maksimal 3). Pilihan kategori aroma resmi: [Citrus, Floral, Woody, Amber, Animalic, Green, Fruity, Musky, Spicy, Sweet / Vanilla, Powdery, Leather, Neutral]. Berikan hasil analisis HANYA dalam bentuk valid JSON object bersih dengan format seperti contoh berikut tanpa markdown codeblock dan tanpa teks penjelasan apa pun: {{\"Ambroxan\": [\"Amber\", \"Musky\"]}}"
         response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(clean_text)
@@ -160,8 +153,9 @@ else:
 
 edited_df["Persentase Aktual Di Botol (%)"] = (edited_df["Vol Needed per Bottle (ml)"] / bottle_size_actual) * 100
 
-# --- TABS LAYOUT ---
-tab_enc, tab_sec, tab0, tab1, tab2 = st.tabs([
+# --- TABS LAYOUT (VARIABEL TABS PAS = 6) ---
+tab_chat, tab_enc, tab_sec, tab0, tab1, tab2 = st.tabs([
+    "💬 AI Fragrance Copilot (Chat)",
     "📐 AI Analisis Piramida & Accords", 
     "📚 AI Ensiklopedia & Keamanan Bahan", 
     "🔍 AI Asisten Riset Harga", 
@@ -169,28 +163,103 @@ tab_enc, tab_sec, tab0, tab1, tab2 = st.tabs([
     "🤖 Kontrol Sisa Stok"
 ])
 
-# --- TAB 1: VISUALISASI PIE CHART 100% MURNI AROMA ---
-with tab_enc:
-    st.header("📐 Analisis Roda Aroma Lingkaran Kompleks (AI Fragrantica Pie Chart)")
-    active_materials = edited_df[edited_df["Rasio Racikan (%)"] > 0]["Nama Raw Material"].tolist()
+# Ambil string ringkasan bahan aktif untuk kebutuhan data AI
+active_materials = edited_df[edited_df["Rasio Racikan (%)"] > 0]["Nama Raw Material"].tolist()
+active_materials_with_notes = []
+for _, r in edited_df[edited_df["Rasio Racikan (%)"] > 0].iterrows():
+    active_materials_with_notes.append(f"{r['Nama Raw Material']} ({r['Kategori Notes (Manual/Bebas)']} - {r['Persentase Aktual Di Botol (%)']:.1f}%)")
+formula_summary_string = ", ".join(active_materials_with_notes)
+
+# --- 🌟 TAB BARU 1: AI FRAGRANCE COPILOT (CHAT INTERAKTIF FILOSOFI) ---
+with tab_chat:
+    st.header("💬 AI Fragrance Copilot & Story Customizer")
+    st.write("Diskusikan filosofi, perbaiki deskripsi aroma, dan sesuaikan narasi produk mewah Anda secara interaktif bersama AI.")
     
     if not api_key:
-        st.warning("⚠️ Masukkan Google Gemini API Key di sidebar untuk memproses penataan aroma secara otomatis.")
+        st.warning("⚠️ Masukkan Google Gemini API Key di sidebar untuk mengobrol dengan Asisten AI Parfum Anda.")
     elif not active_materials:
-        st.info("Masukkan komponen bahan yang aktif di tabel atas untuk memetakan roda lingkaran aroma.")
+        st.info("Masukkan formulasi bahan aktif di tabel atas terlebih dahulu agar AI memiliki basis racikan untuk dianalisis.")
+    else:
+        # Inisialisasi riwayat obrolan (chat history) di session state agar ingatan obrolan tidak hilang saat refresh
+        if "perfume_chat_history" not in st.session_state:
+            st.session_state.perfume_chat_history = []
+            
+            # Prompt inisialisasi awal otomatis untuk membuat filosofi dasar dari racikan komposit saat ini
+            initial_prompt = f"""
+            Kamu adalah Master Perfumer dunia dan Head Copywriter Brand Mewah. Analisis formula parfum berikut: [{formula_summary_string}]. Konsentrasi: {concentration_type}.
+            
+            Buatkan draf komersial awal dalam format Markdown yang indah dan bersih tanpa menggunakan emoji:
+            1. 3 Usulan Nama Eksklusif Varian.
+            2. Narasi Filosofi Produk (2 Paragraf puitis/mewah untuk kebutuhan pemasaran).
+            3. Breakdown Teoretis Deskripsi Penciuman untuk:
+               - Top Notes (Kesan 15 menit pertama)
+               - Heart Notes (Inti karakter varian)
+               - Base Notes (Jejak wangi yang tertinggal di kulit)
+            """
+            try:
+                client = genai.Client(api_key=api_key)
+                response = client.models.generate_content(model='gemini-2.5-flash', contents=initial_prompt)
+                st.session_state.perfume_chat_history.append({"role": "assistant", "text": response.text})
+            except Exception as e:
+                st.error(f"Gagal memicu draf awal AI: {e}")
+
+        # Tampilkan riwayat obrolan di layar
+        for message in st.session_state.perfume_chat_history:
+            if message["role"] == "user":
+                with st.chat_message("user"):
+                    st.write(message["text"])
+            else:
+                with st.chat_message("assistant"):
+                    st.markdown(message["text"])
+
+        # Input teks interaksi dari user di bagian bawah
+        user_chat_input = st.chat_input("Ketik revisi / kemauan Anda di sini (Contoh: 'Ubah filosofinya menjadi bertema misteri malam hari' atau 'Fokuskan top notesnya ke buah segar')")
+        
+        if user_chat_input:
+            # Tampilkan pesan user ke layar
+            with st.chat_message("user"):
+                st.write(user_chat_input)
+            st.session_state.perfume_chat_history.append({"role": "user", "text": user_chat_input})
+            
+            # Kirim seluruh riwayat obrolan + konteks formula ke AI untuk mendapatkan jawaban revisi yang kontekstual
+            with st.spinner("AI Perfumer sedang meracik ulang filosofi impian Anda..."):
+                try:
+                    client = genai.Client(api_key=api_key)
+                    
+                    # Menyusun struktur memori chat lengkap
+                    conversation_context = f"Konteks Formula Aktif Saat Ini: [{formula_summary_string}]. Target Jenis: {concentration_type}.\n"
+                    for msg in st.session_state.perfume_chat_history:
+                        conversation_context += f"{'User' if msg['role']=='user' else 'AI'}: {msg['text']}\n"
+                    
+                    conversation_context += "\nBerikan output revisi terbaru yang rapi dalam format Markdown sesuai permintaan terakhir user tanpa menyertakan emoji."
+                    
+                    response = client.models.generate_content(model='gemini-2.5-flash', contents=conversation_context)
+                    
+                    # Tampilkan balasan terbaru AI ke layar
+                    with st.chat_message("assistant"):
+                        st.markdown(response.text)
+                    st.session_state.perfume_chat_history.append({"role": "assistant", "text": response.text})
+                    
+                    # Refresh otomatis agar chat history teratur rapi
+                    st.rerun()
+                except Exception as e:
+                    st.sidebar.error(f"Eror chat: {e}")
+
+# --- TAB ACCORDS PIE CHART ---
+with tab_enc:
+    st.header("📐 Analisis Roda Aroma Lingkaran Kompleks (AI Fragrantica Pie Chart)")
+    if not api_key: st.warning("Masukkan API Key di sidebar.")
+    elif not active_materials: st.info("Masukkan komponen bahan yang aktif di tabel atas.")
     else:
         ai_complex_mapping = get_ai_complex_accords(active_materials, api_key)
-        
         if ai_complex_mapping:
             accord_rows = []
             for idx, row in edited_df.iterrows():
                 mat_name = row["Nama Raw Material"]
                 pct_val = row["Persentase Aktual Di Botol (%)"]
-                
                 if mat_name in ai_complex_mapping and pct_val > 0:
                     assigned_accords = ai_complex_mapping[mat_name]
                     num_accords = len(assigned_accords)
-                    
                     if num_accords == 1:
                         accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val})
                     elif num_accords == 2:
@@ -200,44 +269,20 @@ with tab_enc:
                         accord_rows.append({"Accords": assigned_accords[0], "Persentase Raw": pct_val * 0.50})
                         accord_rows.append({"Accords": assigned_accords[1], "Persentase Raw": pct_val * 0.30})
                         accord_rows.append({"Accords": assigned_accords[2], "Persentase Raw": pct_val * 0.20})
-            
             if accord_rows:
                 accords_df = pd.DataFrame(accord_rows)
-                # 🚫 MENYARING ZAT NETRAL KELUAR DARI OPERASI MATEMATIKA AROMA
                 accords_df = accords_df[accords_df["Accords"] != "Neutral"]
-                
                 if not accords_df.empty:
-                    # Menghitung total porsi kelompok aroma murni sebagai basis normalisasi
                     total_pure_fragrance_sum = accords_df["Persentase Raw"].sum()
-                    
                     if total_pure_fragrance_sum > 0:
-                        # 💥 LOGIKA BARU: Normalisasi setiap baris aroma agar jika digabung nilainya pas 100%
                         accords_df["Persentase Aroma Komposisi (%)"] = (accords_df["Persentase Raw"] / total_pure_fragrance_sum) * 100
-                        
                         final_chart_data = accords_df.groupby("Accords")["Persentase Aroma Komposisi (%)"].sum().reset_index()
                         final_chart_data = final_chart_data.sort_values(by="Persentase Aroma Komposisi (%)", ascending=False)
                         
-                        # 🥧 RENDERING PLOTLY PIE CHART JAUH LEBIH INTERAKTIF & BERWARNA
-                        st.write("📊 **Roda Komposisi Karakter Aroma Utama (Total Distribusi Pas 100%):**")
-                        
-                        fig = px.pie(
-                            final_chart_data, 
-                            values="Persentase Aroma Komposisi (%)", 
-                            names="Accords", 
-                            hole=0.4, # Membuat gaya Donut Chart mewah ala modern UI
-                            color_discrete_sequence=px.colors.qualitative.Pastel
-                        )
+                        fig = px.pie(final_chart_data, values="Persentase Aroma Komposisi (%)", names="Accords", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
                         fig.update_traces(textinfo="percent+label", textposition="inside")
-                        fig.update_layout(showlegend=True, use_container_width=True)
                         st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Tabel pelengkap data di bawahnya
-                        st.write("**📋 Rincian Kontribusi Faset Aroma Terurut:**")
                         st.dataframe(final_chart_data, hide_index=True, use_container_width=True)
-                else:
-                    st.info("Seluruh komponen diidentifikasi sebagai zat netral/pelarut.")
-        else:
-            st.info("AI sedang merelasikan parameter struktur aroma komponen Anda...")
 
 # --- TAB ENSIKLOPEDIA ---
 with tab_sec:
@@ -269,7 +314,7 @@ with tab0:
                     st.markdown(response.text)
                 except Exception as e: st.error(f"Eror: {e}")
 
-# --- TAB HPP & LABA INTEGRASI STOK BATCH ---
+# --- TAB HPP & LABA ---
 with tab1:
     st.header("Analisis HPP & Proyeksi Laba Maksimal")
     col_f1, col_f2 = st.columns(2)
@@ -335,7 +380,7 @@ with tab2:
     for idx, row in edited_df.iterrows():
         if row["Vol Needed per Bottle (ml)"] > 0:
             current_col = opt_cols[0] if count % 2 == 0 else opt_cols[1]
-            user_stok = current_col.number_input(f"Sisa Stok Berjalan: {row['Nama Raw Material']} (ml)", min_value=0.0, value=float(row['Volume Dibeli (ml)']), key=f"stok_v19_{idx}")
+            user_stok = current_col.number_input(f"Sisa Stok Berjalan: {row['Nama Raw Material']} (ml)", min_value=0.0, value=float(row['Volume Dibeli (ml)']), key=f"stok_v20_{idx}")
             stok_list.append((row['Nama Raw Material'], user_stok, row['Vol Needed per Bottle (ml)']))
             count += 1
     if stok_list:
