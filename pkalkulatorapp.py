@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 from google import genai
 
-st.set_page_config(page_title="UCP ALPHA - Raw Material Calculator", layout="wide")
+st.set_page_config(page_title="UCP ALPHA - Pro Perfumer Studio", layout="wide")
 
-st.title("🧪 Perfume Raw Material & HPP Calculator")
-st.write("Input seluruh komponen raw material Anda dalam tabel ala Excel, hitung HPP otomatis, dan optimasi harga jual.")
+st.title("🧪 UCP ALPHA - Pro Perfumer Studio v8")
+st.write("Formulasi tingkat lanjut dengan pembagian Top, Heart, Base Notes, Asisten AI, dan Visualisasi Piramida Aroma.")
 
 # --- SIDEBAR: KONFIGURASI AI ---
 st.sidebar.header("🔑 Konfigurasi AI")
@@ -13,80 +13,150 @@ api_key = st.sidebar.text_input("Google Gemini API Key", type="password", help="
 
 st.markdown("---")
 
-# --- 1. TABEL INPUT BAHAN BAKU ---
-st.header("📋 1. Tabel Komponen Raw Material")
-st.write("Silakan isi nama bahan, detail pembelian, dan target formula Anda di bawah. Klik dua kali pada kotak untuk mengisi. Anda bisa menambah baris di bagian bawah tabel jika butuh lebih dari 5 bahan.")
+# --- 1. PANDUAN KONSENTRASI & UPLOAD DATA ---
+st.header("📋 1. Panduan Konsentrasi & Upload Data")
+col_g1, col_g2 = st.columns(2)
 
-# Data awal sebagai contoh/template pengisian
+with col_g1:
+    st.subheader("✨ Pilih Target Konsentrasi")
+    concentration_type = st.selectbox(
+        "Kategori Parfum Target:",
+        ["Custom (Isi Sendiri)", "Eau de Cologne (EDC - Bibit ~3%)", "Eau de Toilette (EDT - Bibit ~10%)", "Eau de Parfum (EDP - Bibit ~20%)", "Extrait de Parfum (Bibit ~30%)"]
+    )
+    if concentration_type == "Eau de Cologne (EDC - Bibit ~3%)":
+        st.info("💡 **Rekomendasi Rencana:** Total bahan bibit wewangian (Top+Heart+Base) ±3%, Fixative ±2%, Pelarut/Absolute ±95%")
+    elif concentration_type == "Eau de Toilette (EDT - Bibit ~10%)":
+        st.info("💡 **Rekomendasi Rencana:** Total bahan bibit wewangian (Top+Heart+Base) ±10%, Fixative ±2%, Pelarut/Absolute ±88%")
+    elif concentration_type == "Eau de Parfum (EDP - Bibit ~20%)":
+        st.info("💡 **Rekomendasi Rencana:** Total bahan bibit wewangian (Top+Heart+Base) ±20%, Fixative ±2%, Pelarut/Absolute ±78%")
+    elif concentration_type == "Extrait de Parfum (Bibit ~30%)":
+        st.info("💡 **Rekomendasi Rencana:** Total bahan bibit wewangian (Top+Heart+Base) ±30%, Fixative ±3%, Pelarut/Absolute ±67%")
+
+with col_g2:
+    st.subheader("📂 Upload Data Bahan Baku (Opsional)")
+    st.write("Anda bisa mengunggah file Excel (.xlsx) atau .csv yang berisi data struktur bahan baku Anda.")
+    uploaded_file = st.file_uploader("Pilih file data bahan Anda", type=["csv", "xlsx"])
+
+# Data awal / template default aplikasi
 initial_data = {
-    "Nama Raw Material": ["Bibit Utama A", "Absolute/Pelarut", "Fixative/Pengikat", "Bahan Tambahan D", "Bahan Tambahan E"],
-    "Volume Dibeli (ml)": [100.0, 1000.0, 50.0, 10.0, 10.0],
-    "Harga Beli (Rp)": [200000, 120000, 100000, 50000, 0],
-    "Rasio Racikan (%)": [20.0, 75.0, 3.0, 2.0, 0.0]
+    "Nama Raw Material": ["Bergamot Oil", "Jasmine Absolute", "Cedarwood Oil", "Absolute/Pelarut", "Fixative/Pengikat"],
+    "Kategori Notes": ["Top Notes", "Heart Notes", "Base Notes", "Solvent / Pelarut", "Fixative / Pengikat"],
+    "Volume Dibeli (ml)": [50.0, 50.0, 50.0, 1000.0, 100.0],
+    "Harga Beli (Rp)": [150000, 250000, 200000, 120000, 150000],
+    "Rasio Racikan (%)": [10.0, 10.0, 10.0, 68.0, 2.0]
 }
-df_template = pd.DataFrame(initial_data)
 
-# Mengaktifkan tabel interaktif yang bisa diedit, ditambah barisnya, atau dikurangi
+if uploaded_file is not None:
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            df_template = pd.read_csv(uploaded_file)
+        else:
+            df_template = pd.read_excel(uploaded_file)
+        st.success("✅ Data berhasil dimuat dari file!")
+    except Exception as e:
+        st.error(f"Gagal membaca file: {e}")
+        df_template = pd.DataFrame(initial_data)
+else:
+    df_template = pd.DataFrame(initial_data)
+
+st.subheader("📊 Tabel Formulasi Bahan Baku")
+st.write("Klik dua kali pada kolom 'Kategori Notes' untuk memilih peran bahan wewangian Anda.")
+
+# Data editor dengan pilihan drop-down kategori notes baru
 edited_df = st.data_editor(
     df_template, 
     num_rows="dynamic", 
     use_container_width=True,
     column_config={
+        "Kategori Notes": st.column_config.SelectboxColumn(
+            options=["Top Notes", "Heart Notes", "Base Notes", "Solvent / Pelarut", "Fixative / Pengikat"], 
+            required=True
+        ),
         "Harga Beli (Rp)": st.column_config.NumberColumn(format="Rp %d"),
         "Volume Dibeli (ml)": st.column_config.NumberColumn(format="%.1f ml"),
         "Rasio Racikan (%)": st.column_config.NumberColumn(format="%.2f %%")
     }
 )
 
-# --- PROSES KALKULASI DARI TABEL ---
-# Menghitung Harga per ml untuk setiap baris
 edited_df["Modal per ml (Rp)"] = edited_df["Harga Beli (Rp)"] / edited_df["Volume Dibeli (ml)"]
 edited_df["Modal per ml (Rp)"] = edited_df["Modal per ml (Rp)"].fillna(0)
-
-# Validasi Total Persentase
 total_percentage = edited_df["Rasio Racikan (%)"].sum()
 
-if total_percentage != 100.0:
-    st.warning(f"⚠️ Total Rasio Racikan saat ini: **{total_percentage:.2f}%**. Pastikan totalnya pas **100%** agar perhitungan HPP akurat.")
-else:
-    st.success(f"✅ Total Rasio Racikan sempurna: **100%**")
+col_p1, col_p2 = st.columns(2)
+with col_p1:
+    st.metric(label="Total Akumulasi Rasio Bahan Saat Ini", value=f"{total_percentage:.2f} %")
+with col_p2:
+    if total_percentage != 100.0:
+        st.warning("⚠️ Total akumulasi seluruh bahan harus tepat 100% untuk kalkulasi HPP yang akurat.")
+    else:
+        st.success("✅ Formulasi klop! Total akumulasi tepat 100%.")
 
 st.markdown("---")
 
-# --- 2. PARAMETER PRODUKSI & FINANSIAL ---
-tab1, tab2, tab3 = st.tabs(["📊 Perhitungan HPP & Harga Jual", "🔮 AI Filosofi & Karakter Varian", "🤖 Optimasi Stok"])
+# --- 2. TABS UNTUK FITUR APLIKASI ---
+tab0, tab1, tab2, tab3 = st.tabs(["🔍 🤖 AI Asisten Riset Harga", "📊 Perhitungan HPP & Laba", "🔮 AI Filosofi & Storytelling", "🤖 Kontrol Sisa Stok"])
 
+# --- TAB 0: ASISTEN RISET HARGA ---
+with tab0:
+    st.header("🔍 AI Market Price Researcher")
+    st.write("Cari tahu estimasi kisaran harga raw material parfum di pasar lokal Indonesia secara cepat.")
+    
+    if not api_key:
+        st.warning("⚠️ Masukkan Google Gemini API Key di sidebar untuk mengaktifkan fitur riset harga ini.")
+    else:
+        search_material = st.text_input("Ketik nama bahan baku wewangian (Contoh: Iso E Super, Galaxolide, Lavender Oil murni):")
+        
+        if st.button("🔍 Cek Estimasi Pasar & Sumber"):
+            if not search_material:
+                st.error("Silakan masukkan nama bahan baku terlebih dahulu.")
+            else:
+                with st.spinner(f"AI sedang meriset estimasi pasaran untuk {search_material}..."):
+                    try:
+                        client = genai.Client(api_key=api_key)
+                        prompt = f"""
+                        Kamu adalah konsultan pengadaan bahan baku industri kosmetik dan wewangian di Indonesia.
+                        Berikan analisis ringkas untuk bahan baku berikut: '{search_material}'
+                        
+                        Tampilkan output dalam format Markdown:
+                        1. **Estimasi Rentang Harga Pasaran di Indonesia** (Per ml/gram/kg di supplier lokal).
+                        2. **Karakteristik Mutu** (Cara membedakan barang berkualitas/murni vs oplosan).
+                        3. **Rekomendasi Pembelian** (Tips mencari seller tepercaya di marketplace lokal).
+                        """
+                        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                        st.markdown("---")
+                        st.info(f"💡 **Hasil Analisis Pasar AI untuk: {search_material}**")
+                        st.markdown(response.text)
+                    except Exception as e:
+                        st.error(f"Gagal memanggil layanan AI: {e}")
+
+# --- TAB 1: HPP & DIAGRAM ---
 with tab1:
-    st.header("Formulasi Bisnis & Harga")
+    st.header("Analisis HPP & Harga Jual")
+    
+    # Diagram Komposisi Notes Parfum yang diperbarui
+    if total_percentage > 0:
+        st.write("📐 **Struktur Piramida Aroma Terpeta (Diagram Batang):**")
+        notes_summary = edited_df.groupby("Kategori Notes")["Rasio Racikan (%)"].sum().reset_index()
+        st.bar_chart(data=notes_summary, x="Kategori Notes", y="Rasio Racikan (%)", color="Kategori Notes", use_container_width=True)
     
     col_f1, col_f2 = st.columns(2)
     with col_f1:
-        st.subheader("⚙️ Volume & Kemasan")
-        target_bottles = st.number_input("Target Jumlah Botol yang Dibuat", min_value=1, value=50)
-        bottle_size = st.number_input("Ukuran Botol per Pcs (ml)", min_value=5, value=50)
-        price_bottle = st.number_input("Harga Kemasan Terpasang (Botol + Stiker per pcs)", min_value=0, value=6000)
-        
+        target_bottles = st.number_input("Target Produksi (Botol)", min_value=1, value=50, key="tb")
+        bottle_size = st.number_input("Ukuran Botol (ml)", min_value=5, value=50, key="bs")
+        price_bottle = st.number_input("Biaya Kemasan + Stiker (per pcs)", min_value=0, value=6000, key="pb")
     with col_f2:
-        st.subheader("🎯 Strategi Profit")
-        pricing_method = st.radio("Metode Penentuan Harga Jual:", ["Target Markup (Kenaikan dari Modal)", "Target Margin Laba Kotor (%)"])
+        pricing_method = st.radio("Metode Penentuan Harga Jual:", ["Target Markup (Kenaikan dari Modal)", "Target Margin Laba Kotor (%)"], key="pm")
         if pricing_method == "Target Markup (Kenaikan dari Modal)":
-            markup_pct = st.slider("Persentase Kenaikan Harga (%)", 50, 500, 200, step=10)
+            markup_pct = st.slider("Persentase Kenaikan Harga (%)", 50, 500, 200, step=10, key="mp")
         else:
-            margin_pct = st.slider("Target Margin Laba Kotor (%)", 10, 90, 60, step=5)
+            margin_pct = st.slider("Target Margin Laba Kotor (%)", 10, 90, 60, step=5, key="map")
 
-    # Hitung Kebutuhan & Biaya Riil berdasarkan isi tabel
-    total_volume_needed = target_bottles * bottle_size
-    
-    # Hitung HPP cairan per botol
-    # Rumus: Jumlah cairan per botol untuk bahan X dikali modal per ml bahan X
     edited_df["Vol Needed per Bottle (ml)"] = (edited_df["Rasio Racikan (%)"] / 100) * bottle_size
     edited_df["Cost per Bottle (Rp)"] = edited_df["Vol Needed per Bottle (ml)"] * edited_df["Modal per ml (Rp)"]
-    
     total_liquid_cost_per_bottle = edited_df["Cost per Bottle (Rp)"].sum()
     hpp_per_bottle = total_liquid_cost_per_bottle + price_bottle
     total_production_cost = hpp_per_bottle * target_bottles
 
-    # Perhitungan Harga Jual
     if pricing_method == "Target Markup (Kenaikan dari Modal)":
         suggested_price = hpp_per_bottle * (1 + (markup_pct / 100))
     else:
@@ -98,86 +168,52 @@ with tab1:
     st.markdown("---")
     res_c1, res_c2 = st.columns(2)
     with res_c1:
-        st.write("📊 **Rincian Formula per Botol:**")
+        st.write("📋 **Rincian Takaran Racikan per Botol:**")
         for _, row in edited_df.iterrows():
             if row["Rasio Racikan (%)"] > 0:
-                st.write(f"* **{row['Nama Raw Material']}**: {row['Vol Needed per Bottle (ml)']:.2f} ml / botol (Biaya: Rp {row['Cost per Bottle (Rp)']:,.0f})")
-        st.write(f"* 🍾 **Biaya Botol & Kemasan**: Rp {price_bottle:,.0f} / botol")
-        
+                st.write(f"* **{row['Nama Raw Material']}** ({row['Kategori Notes']}): {row['Vol Needed per Bottle (ml)']:.2f} ml (Biaya: Rp {row['Cost per Bottle (Rp)']:,.0f})")
     with res_c2:
         st.metric(label="Harga Pokok Penjualan (HPP) per Botol", value=f"Rp {hpp_per_bottle:,.0f}")
-        st.metric(label="💡 Saran Harga Jual per Botol", value=f"Rp {suggested_price:,.0f}", delta=f"Profit Bersih/Botol: Rp {suggested_price - hpp_per_bottle:,.0f}")
-        
-    st.markdown("---")
-    st.subheader("💰 Proyeksi Keuntungan Total")
-    p_col1, p_col2, p_col3 = st.columns(3)
-    p_col1.metric(label="Total Modal Produksi Batch", value=f"Rp {total_production_cost:,.0f}")
-    p_col2.metric(label="Estimasi Total Omzet", value=f"Rp {total_revenue:,.0f}")
-    p_col3.metric(label="Estimasi Laba Bersih", value=f"Rp {total_profit:,.0f}")
+        st.metric(label="💡 Saran Harga Jual Komersial", value=f"Rp {suggested_price:,.0f}", delta=f"Laba Kotor/Botol: Rp {suggested_price - hpp_per_bottle:,.0f}")
 
+# --- TAB 2: AI FILOSOFI ---
 with tab2:
     st.header("🔮 AI Fragrance Storyteller")
     if not api_key:
-        st.warning("⚠️ Masukkan Google Gemini API Key di sidebar untuk mengaktifkan AI.")
+        st.warning("⚠️ Masukkan API Key.")
     else:
-        # Mengambil daftar nama bahan yang diinput di tabel sebagai referensi AI
-        active_ingredients = edited_df[edited_df["Rasio Racikan (%)"] > 0]["Nama Raw Material"].tolist()
-        
-        st.write(f"Bahan aktif terdeteksi: *{', '.join(active_ingredients)}*")
-        aroma_type = st.multiselect("Pilih Vibes Utama Aroma:", ["Manis (Sweet)", "Segar (Fresh/Citrus)", "Bunga (Floral)", "Kayu (Woody/Oud)", "Rempah (Spicy)", "Mewah/Eksklusif", "Calm/Powdery"])
-        target_pasar = st.text_input("Target Pasar Spasifik:")
-        catatan_tambahan = st.text_area("Deskripsi Tambahan / Nuansa Khusus yang Ingin Ditonjolkan:")
-        
-        if st.button("✨ Racik Filosofi Varian"):
-            if not aroma_type:
-                st.error("Pilih minimal satu vibes aroma!")
-            else:
-                with st.spinner("AI sedang menerjemahkan formula Anda menjadi cerita produk..."):
-                    try:
-                        client = genai.Client(api_key=api_key)
-                        prompt = f"""
-                        Kamu adalah perfumer profesional sekaligus copywriter brand mewah. Buatkan konsep parfum dengan:
-                        - Struktur Komponen: {', '.join(active_ingredients)}
-                        - Vibes Aroma: {', '.join(aroma_type)}
-                        - Target Pasar: {target_pasar}
-                        - Catatan Khusus: {catatan_tambahan}
-                        
-                        Output harus rapi dalam format Markdown meliputi: 3 Usulan Nama Eksklusif, Narasi Filosofi Produk untuk jualan/stiker, serta breakdown Top, Middle, dan Base Notes yang selaras secara teoritis.
-                        """
-                        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-                        st.markdown("---")
-                        st.success("🎉 Konsep Varian Sukses Dibuat!")
-                        st.markdown(response.text)
-                    except Exception as e:
-                        st.error(f"Gagal memanggil AI: {e}")
+        active_ingredients = edited_df[edited_df["Rasio Racikan (%)"] > 0]
+        ingredients_string = ", ".join([f"{r['Nama Raw Material']} ({r['Kategori Notes']} - {r['Rasio Racikan (%)']}% )" for _, r in active_ingredients.iterrows()])
+        target_pasar = st.text_input("Spesifikasi Target Pasar:")
+        catatan_tambahan = st.text_area("Nuansa / Kesan Emosional Varian:")
+        if st.button("✨ Racik Cerita Varian"):
+            try:
+                client = genai.Client(api_key=api_key)
+                prompt = f"""
+                Kamu adalah Master Perfumer. Analisis formula komersial ini:
+                Struktur Komponen: {ingredients_string}
+                Target Pasar: {target_pasar}
+                Nuansa Impian: {catatan_tambahan}
+                
+                Buatkan: 3 Opsi Nama Varian Menarik, 2 Paragraf Narasi Filosofi Produk Indah, dan Evaluasi Taktis apakah proporsi kombinasi Top, Heart, dan Base Notes yang diisi user sudah harmonis atau butuh penyesuaian fiksasi. Output dalam Markdown.
+                """
+                response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                st.markdown(response.text)
+            except Exception as e: st.error(f"Eror: {e}")
 
+# --- TAB 3: KONTROL STOK ---
 with tab3:
     st.header("🤖 Smart Stock Optimizer")
-    st.write("Mencari batas maksimal botol yang bisa diracik berdasarkan sisa stok *raw material* Anda.")
-    
-    # Membuat input stok otomatis berdasarkan daftar nama bahan di tabel
     stok_list = []
-    st.write("**Masukkan Sisa Stok Bahan Anda Saat Ini (ml):**")
-    
     opt_cols = st.columns(2)
     count = 0
-    
     for idx, row in edited_df.iterrows():
         if row["Rasio Racikan (%)"] > 0:
             current_col = opt_cols[0] if count % 2 == 0 else opt_cols[1]
-            user_stok = current_col.number_input(f"Sisa Stok: {row['Nama Raw Material']} (ml)", min_value=0.0, value=float(row['Volume Dibeli (ml)']), key=f"stok_{idx}")
+            user_stok = current_col.number_input(f"Stok: {row['Nama Raw Material']} (ml)", min_value=0.0, value=float(row['Volume Dibeli (ml)']), key=f"stok_v8_{idx}")
             stok_list.append((row['Nama Raw Material'], user_stok, row['Vol Needed per Bottle (ml)']))
             count += 1
-            
     if stok_list:
-        max_bottles_possible = []
-        for name, current_stok, vol_per_b in stok_list:
-            if vol_per_b > 0:
-                max_bottles_possible.append(current_stok // vol_per_b)
-            else:
-                max_bottles_possible.append(float('inf'))
-        
+        max_bottles_possible = [stok // vol if vol > 0 else float('inf') for _, stok, vol in stok_list]
         final_max_production = int(min(max_bottles_possible)) if max_bottles_possible else 0
-        
-        st.markdown("---")
-        st.success(f"Berdasarkan komponen bahan yang paling kritis, Anda hanya dapat memproduksi maksimal **{final_max_production} botol** (ukuran botol saat ini).")
+        st.success(f"Batas maksimal produksi riil Anda saat ini adalah **{final_max_production} botol**.")
